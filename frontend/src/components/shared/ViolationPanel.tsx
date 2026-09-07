@@ -1,4 +1,5 @@
-import { Ban, TriangleAlert, UserCheck } from 'lucide-react'
+import { useState } from 'react'
+import { Ban, ShieldAlert, TriangleAlert, UserCheck } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
@@ -17,6 +18,7 @@ interface ViolationPanelProps {
   alternatives: EligibleCandidate[]
   staffById: Map<string, StaffMember>
   onAssignAlternative: (staffId: string) => void
+  onOverrideAssign: (reason: string) => void
   assigningStaffId?: string | null
 }
 
@@ -30,9 +32,16 @@ export function ViolationPanel({
   alternatives,
   staffById,
   onAssignAlternative,
+  onOverrideAssign,
   assigningStaffId,
 }: ViolationPanelProps) {
   const topAlternatives = alternatives.filter((a) => a.qualifies).slice(0, 3)
+
+  const hardViolations = violations.filter((v) => v.severity === 'hard')
+  const canOverride = hardViolations.length > 0 && hardViolations.every((v) => v.overridable)
+  const [overrideMode, setOverrideMode] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
+  const isOverriding = assigningStaffId === attemptedStaff.id
 
   return (
     <Modal open={open} onClose={onClose} title="Assignment blocked" size="lg">
@@ -125,6 +134,53 @@ export function ViolationPanel({
             </ul>
           )}
         </div>
+
+        {canOverride && (
+          <div className="border-t border-slate-200 pt-4">
+            {!overrideMode ? (
+              <button
+                onClick={() => setOverrideMode(true)}
+                className="text-body-xs text-slate-500 underline decoration-dotted underline-offset-2 hover:text-brick"
+              >
+                Override and assign anyway
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2 rounded-sm border border-dashed border-brick/40 bg-brick/5 p-3">
+                <p className="flex items-center gap-1.5 text-body-xs font-medium text-brick">
+                  <ShieldAlert size={13} /> This bypasses a hard rule — document why before continuing.
+                </p>
+                <textarea
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="Why is this override necessary?"
+                  rows={3}
+                  className="rounded-sm border border-slate-300 bg-paper p-2 text-body-sm text-ink focus:border-ink"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setOverrideMode(false)
+                      setOverrideReason('')
+                    }}
+                    disabled={isOverriding}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={!overrideReason.trim() || isOverriding}
+                    onClick={() => onOverrideAssign(overrideReason.trim())}
+                  >
+                    {isOverriding ? 'Assigning…' : 'Override and assign'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end border-t border-slate-200 pt-4">
           <Button variant="secondary" onClick={onClose}>

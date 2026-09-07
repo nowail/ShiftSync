@@ -37,19 +37,21 @@ export interface Shift {
   assignedStaffId: string | null
   status: ShiftStatus
   isPremium: boolean
+  overrideReason?: string | null // set when the current assignment bypassed an overridable hard violation
 }
 
 export type ViolationType =
-  | 'daily_overtime' // > 12h in a day — hard
-  | 'double_booking' // overlapping shifts — hard
-  | 'not_certified' // missing skill/location certification — hard
+  | 'daily_overtime' // > 12h in a day — hard, not overridable
+  | 'double_booking' // overlapping shifts — hard, not overridable
+  | 'not_certified' // missing skill/location certification — hard, not overridable
   | 'weekly_overtime' // approaching/over 40h in a week — soft
-  | 'consecutive_days' // 6th+ consecutive day worked — soft
+  | 'consecutive_days' // 6th day is a soft warning; 7th+ is hard but overridable
 
 export interface Violation {
   type: ViolationType
   severity: 'hard' | 'soft'
   message: string
+  overridable?: boolean // hard violations only — true means a manager can override with a documented reason
 }
 
 export interface EligibleCandidate {

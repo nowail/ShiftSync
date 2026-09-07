@@ -6,7 +6,8 @@ import { localDateKey, formatDateInZone } from './timezone'
 const DAILY_HARD_LIMIT_HOURS = 12
 const WEEKLY_WARNING_HOURS = 35
 const WEEKLY_REFERENCE_HOURS = 40
-const CONSECUTIVE_DAY_WARNING = 6
+const CONSECUTIVE_DAY_WARNING = 6 // soft
+const CONSECUTIVE_DAY_HARD = 7 // hard, overridable
 
 const PUBLISH_CUTOFF_HOURS = 48
 
@@ -117,7 +118,14 @@ export function evaluateAssignment(
   }
 
   const streak = consecutiveDaysIncluding(staff.id, location, staffShifts, dateKey)
-  if (streak >= CONSECUTIVE_DAY_WARNING) {
+  if (streak >= CONSECUTIVE_DAY_HARD) {
+    violations.push({
+      type: 'consecutive_days',
+      severity: 'hard',
+      overridable: true,
+      message: `This would be ${staff.name}'s ${ordinal(streak)} consecutive day worked — requires manager override with a documented reason.`,
+    })
+  } else if (streak >= CONSECUTIVE_DAY_WARNING) {
     violations.push({
       type: 'consecutive_days',
       severity: 'soft',

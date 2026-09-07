@@ -75,7 +75,7 @@ export async function assignStaffToShift(
   shiftId: string,
   staffId: string,
   actor: { id: string; name: string },
-  opts: { override?: boolean } = {},
+  opts: { override?: boolean; overrideReason?: string } = {},
 ): Promise<AssignResult> {
   return withMockLatency(() => {
     const shift = db.shifts.find((s) => s.id === shiftId)
@@ -85,23 +85,37 @@ export async function assignStaffToShift(
     const location = db.locations.find((l) => l.id === shift.locationId)!
 
     const violations = evaluateAssignment(shift, staff, db.shifts, location)
-    const hardBlocked = violations.some((v) => v.severity === 'hard')
-    if (hardBlocked && !opts.override) {
+    const hardViolations = violations.filter((v) => v.severity === 'hard')
+    const blocking = hardViolations.filter((v) => !v.overridable)
+
+    // Non-overridable hard violations (double-booking, skill/cert mismatch, 12h daily cap)
+    // can never be forced through, override flag or not.
+    if (blocking.length > 0) {
+      return { ok: false, violations }
+    }
+    // Overridable hard violations (currently only the 7th-consecutive-day rule) still
+    // require the caller to have explicitly confirmed the override.
+    if (hardViolations.length > 0 && !opts.override) {
       return { ok: false, violations }
     }
 
+    const isOverride = hardViolations.length > 0 && opts.override
     const previousStaffId = shift.assignedStaffId
     shift.assignedStaffId = staffId
+    shift.overrideReason = isOverride ? (opts.overrideReason ?? null) : null
+
     pushAudit({
       actorId: actor.id,
       actorName: actor.name,
-      action: previousStaffId ? 'reassigned_shift' : 'assigned_shift',
+      action: isOverride ? 'assigned_shift_override' : previousStaffId ? 'reassigned_shift' : 'assigned_shift',
       entity: 'shift',
       entityId: shift.id,
       locationId: shift.locationId,
-      details: `Assigned ${staff.name} to ${shift.role} on ${shift.date}${
-        previousStaffId ? ' (was previously assigned to someone else)' : ''
-      }.`,
+      details: isOverride
+        ? `Assigned ${staff.name} to ${shift.role} on ${shift.date} via manager override (${hardViolations[0].message}). Reason: "${shift.overrideReason}"`
+        : `Assigned ${staff.name} to ${shift.role} on ${shift.date}${
+            previousStaffId ? ' (was previously assigned to someone else)' : ''
+          }.`,
     })
     return { ok: true, shift }
   })

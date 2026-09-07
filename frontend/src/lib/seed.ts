@@ -442,6 +442,28 @@ function buildShifts(): Shift[] {
     isPremium: true,
   })
 
+  // --- 7th-consecutive-day override example ---
+  // Taylor Brooks already works PM grill Sun-Fri at Riverside Portland (6 consecutive
+  // days, the soft warning threshold). This adds the Saturday assignment that pushed
+  // past it into the hard-but-overridable 7th-day rule — already resolved via manager
+  // override, so the state is visible on first load rather than only reachable by
+  // clicking through the assign flow.
+  const pdx = loc('loc-pdx')
+  const overrideDay = dayKey(CURRENT_WEEK_START, 6)
+  shifts.push({
+    id: 'sh-overtime-trap-override',
+    locationId: 'loc-pdx',
+    weekStart: CURRENT_WEEK_START_KEY,
+    date: overrideDay,
+    startUtc: zonedWallTimeToUtcIso(overrideDay, '15:00', pdx.timezone),
+    endUtc: zonedWallTimeToUtcIso(overrideDay, '23:00', pdx.timezone),
+    role: 'grill',
+    assignedStaffId: 'usr-7',
+    status: 'published',
+    isPremium: false,
+    overrideReason: 'No other grill-certified staff available Saturday night; Taylor agreed to cover. Reviewed and approved.',
+  })
+
   return shifts
 }
 
@@ -602,5 +624,17 @@ export const AUDIT_LOG: AuditEntry[] = [
     locationId: 'loc-sf',
     at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
     details: 'Removed Priya Nair from the grill shift after an availability conflict.',
+  },
+  {
+    id: 'audit-6',
+    actorId: 'usr-mgr-sf',
+    actorName: 'Casey Nolan',
+    action: 'assigned_shift_override',
+    entity: 'shift',
+    entityId: 'sh-overtime-trap-override',
+    locationId: 'loc-pdx',
+    at: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
+    details:
+      'Assigned Taylor Brooks to Saturday grill via manager override — 7th consecutive day worked. Reason: "No other grill-certified staff available Saturday night; Taylor agreed to cover. Reviewed and approved."',
   },
 ]

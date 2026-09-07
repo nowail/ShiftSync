@@ -48,16 +48,20 @@ export function AssignPanel({
   }
 
   const assignMutation = useMutation({
-    mutationFn: (staffId: string) => assignStaffToShift(shift.id, staffId, actor),
-    onMutate: (staffId) => setAssigningId(staffId),
-    onSuccess: (result, staffId) => {
+    mutationFn: (vars: { staffId: string; override?: boolean; overrideReason?: string }) =>
+      assignStaffToShift(shift.id, vars.staffId, actor, {
+        override: vars.override,
+        overrideReason: vars.overrideReason,
+      }),
+    onMutate: (vars) => setAssigningId(vars.staffId),
+    onSuccess: (result, vars) => {
       setAssigningId(null)
       if (result.ok) {
         invalidate()
-        pushToast({ title: `${staffById.get(staffId)?.name} assigned`, tone: 'success' })
+        pushToast({ title: `${staffById.get(vars.staffId)?.name} assigned`, tone: 'success' })
         onClose()
       } else {
-        setBlockedStaffId(staffId)
+        setBlockedStaffId(vars.staffId)
       }
     },
     onError: () => setAssigningId(null),
@@ -87,7 +91,8 @@ export function AssignPanel({
         alternatives={(candidatesQuery.data ?? []).filter((c) => c.staffId !== blockedStaffId)}
         staffById={staffById}
         assigningStaffId={assigningId}
-        onAssignAlternative={(staffId) => assignMutation.mutate(staffId)}
+        onAssignAlternative={(staffId) => assignMutation.mutate({ staffId })}
+        onOverrideAssign={(reason) => assignMutation.mutate({ staffId: blockedStaffId, override: true, overrideReason: reason })}
       />
     )
   }
@@ -167,7 +172,7 @@ export function AssignPanel({
                     <Button
                       size="sm"
                       variant={candidate.qualifies ? 'primary' : 'secondary'}
-                      onClick={() => assignMutation.mutate(candidate.staffId)}
+                      onClick={() => assignMutation.mutate({ staffId: candidate.staffId })}
                       disabled={assigningId === candidate.staffId}
                     >
                       {assigningId === candidate.staffId ? 'Assigning…' : candidate.qualifies ? 'Assign' : 'Try anyway'}

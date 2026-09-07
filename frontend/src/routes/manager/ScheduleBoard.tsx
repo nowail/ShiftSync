@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import { formatInTimeZone } from 'date-fns-tz'
 import { addDays, format, parseISO } from 'date-fns'
-import { CheckCircle2, Lock, Plus, Star } from 'lucide-react'
+import { CheckCircle2, Lock, Plus, ShieldAlert, Star } from 'lucide-react'
 import { getShiftsForWeek } from '../../services/shifts'
 import { getLocations } from '../../services/locations'
 import { getStaff } from '../../services/staff'
@@ -244,6 +244,9 @@ export function ScheduleBoard() {
             </span>
             <span className="flex items-center gap-1">
               <Star size={12} className="text-amber-dark" /> premium shift
+            </span>
+            <span className="flex items-center gap-1">
+              <ShieldAlert size={12} className="text-brick" /> assigned via override
             </span>
           </div>
         </>

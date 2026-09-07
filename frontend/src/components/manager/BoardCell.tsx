@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Lock, Plus, Star } from 'lucide-react'
+import { Lock, Plus, ShieldAlert, Star } from 'lucide-react'
 import { Avatar } from '../shared/Avatar'
 import { isWithinPublishCutoff } from '../../lib/rules'
 import type { Shift, StaffMember } from '../../types'
@@ -62,6 +62,11 @@ export function BoardCell({
               </span>
             )}
             {shift.isPremium && <Star size={12} className="shrink-0 text-amber-dark" aria-hidden="true" />}
+            {shift.overrideReason && (
+              <span title={`Assigned via manager override: ${shift.overrideReason}`}>
+                <ShieldAlert size={12} className="shrink-0 text-brick" aria-hidden="true" />
+              </span>
+            )}
             {locked && <Lock size={12} className="shrink-0 text-slate-400" aria-hidden="true" />}
           </motion.button>
         )
