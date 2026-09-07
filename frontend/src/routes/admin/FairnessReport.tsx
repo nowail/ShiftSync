@@ -28,6 +28,12 @@ function fairnessTone(score: number): 'moss' | 'flag' | 'brick' {
   return 'brick'
 }
 
+const TONE_BAR_BG: Record<ReturnType<typeof fairnessTone>, string> = {
+  moss: 'bg-moss',
+  flag: 'bg-flag',
+  brick: 'bg-brick',
+}
+
 function shortName(name: string): string {
   const [first, last] = name.split(' ')
   return last ? `${first} ${last[0]}.` : first
@@ -88,6 +94,21 @@ export function FairnessReport() {
     })
   }, [rows])
 
+  // Ranked by each person's own premium-shift ratio (their personal "45% premium shifts"
+  // stat); colored by the existing fairnessScore instead, since that's the one that already
+  // accounts for how much they worked overall — a high premium % isn't inequitable on its
+  // own if their hours share is proportionally high too.
+  const rankedByPremiumShare = useMemo(() => {
+    return rows
+      .map(({ row, staff }) => ({
+        staff,
+        row,
+        personalPremiumPct: row.totalShiftCount > 0 ? (row.premiumShiftCount / row.totalShiftCount) * 100 : 0,
+      }))
+      .sort((a, b) => b.personalPremiumPct - a.personalPremiumPct)
+      .slice(0, 6)
+  }, [rows])
+
   const locationFairness = useMemo(() => {
     if (!locationsQuery.data || !shiftsQuery.data) return []
     return computeLocationFairness(shiftsQuery.data, locationsQuery.data)
@@ -135,21 +156,21 @@ export function FairnessReport() {
               {
                 label: 'Lowest fairness score',
                 value: lowest ? lowest.score.toFixed(2) : '—',
-                icon: <TrendingDown size={14} className="text-brick" />,
+                icon: <TrendingDown size={16} />,
                 tone: lowest ? 'brick' : 'ink',
                 hint: lowest?.location.name,
               },
               {
                 label: 'Highest fairness score',
                 value: highest ? highest.score.toFixed(2) : '—',
-                icon: <TrendingUp size={14} className="text-amber-dark" />,
+                icon: <TrendingUp size={16} />,
                 tone: highest ? 'amber' : 'ink',
                 hint: highest?.location.name,
               },
               {
                 label: 'Company average',
                 value: average.toFixed(2),
-                icon: <Scale size={14} className="text-slate-500" />,
+                icon: <Scale size={16} />,
                 hint: '1.00 = perfectly proportional',
               },
             ]}
@@ -168,6 +189,35 @@ export function FairnessReport() {
             <EmptyState title="No scheduled hours yet" body="Once shifts are assigned this week, fairness data will show up here." />
           ) : (
             <>
+              <div className="rounded-md border border-slate-200 p-4">
+                <h2 className="mb-3 font-display text-display-sm text-ink">Ranked by premium-shift share</h2>
+                <ol className="flex flex-col gap-3">
+                  {rankedByPremiumShare.map((entry, i) => {
+                    const tone = fairnessTone(entry.row.fairnessScore)
+                    return (
+                      <li key={entry.staff.id} className="flex items-center gap-3">
+                        <span className="w-4 shrink-0 text-right text-body-sm font-semibold text-slate-400">
+                          {i + 1}
+                        </span>
+                        <Avatar name={entry.staff.name} color={entry.staff.avatarColor} size={26} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-body-sm font-medium text-ink">{entry.staff.name}</span>
+                            <Badge tone={tone}>{entry.personalPremiumPct.toFixed(0)}% premium shifts</Badge>
+                          </div>
+                          <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100">
+                            <div
+                              className={`h-1.5 rounded-full ${TONE_BAR_BG[tone]}`}
+                              style={{ width: `${entry.personalPremiumPct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+
               <div className="rounded-md border border-slate-200 p-4">
                 <div className="mb-1 flex items-center justify-between">
                   <h2 className="font-display text-display-sm text-ink">Premium share vs. hours share</h2>

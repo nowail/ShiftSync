@@ -87,18 +87,18 @@ export function AuditLog() {
             {
               label: 'Actions this week',
               value: String(weekStats.totalThisWeek),
-              icon: <Activity size={14} className="text-slate-500" />,
+              icon: <Activity size={16} />,
             },
             {
               label: 'Most active location',
               value: weekStats.mostActiveLocation?.location.name ?? '—',
-              icon: <MapPinned size={14} className="text-slate-500" />,
+              icon: <MapPinned size={16} />,
               hint: weekStats.mostActiveLocation ? `${weekStats.mostActiveLocation.count} actions` : undefined,
             },
             {
               label: 'Most common action',
               value: weekStats.mostCommonAction ? actionLabel(weekStats.mostCommonAction.action) : '—',
-              icon: <Zap size={14} className="text-slate-500" />,
+              icon: <Zap size={16} />,
               hint: weekStats.mostCommonAction
                 ? `${weekStats.mostCommonAction.count} time${weekStats.mostCommonAction.count === 1 ? '' : 's'}`
                 : undefined,

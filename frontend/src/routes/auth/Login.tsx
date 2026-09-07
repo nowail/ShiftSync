@@ -4,6 +4,7 @@ import { ShieldCheck, Users, UserRound } from 'lucide-react'
 import { useSessionStore } from '../../store/session'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import logo from '../../assets/shiftsync-logo.svg'
 import type { Role } from '../../types'
 
 const ROLE_OPTIONS: { role: Role; label: string; description: string; icon: typeof ShieldCheck }[] = [
@@ -27,10 +28,10 @@ export function Login() {
     <div className="flex min-h-screen items-center bg-ink px-6 py-12">
       <div className="mx-auto grid w-full max-w-4xl gap-10 md:grid-cols-2">
         <div className="flex flex-col justify-center gap-4 text-paper">
-          <span className="grid h-10 w-8 grid-rows-3 gap-[3px]" aria-hidden="true">
-            <span className="rounded-[1px] bg-amber" />
-            <span className="rounded-[1px] bg-paper" />
-            <span className="rounded-[1px] bg-paper/50" />
+          {/* Paper chip behind the mark: its two dark bars are ink-colored, so they need a
+              light backdrop for contrast against this dark panel. */}
+          <span className="flex h-12 w-12 items-center justify-center rounded-sm bg-paper" aria-hidden="true">
+            <img src={logo} alt="" className="h-8 w-auto" />
           </span>
           <h1 className="font-display text-display-xl leading-none">ShiftSync</h1>
           <p className="max-w-sm text-body-md text-slate-300">

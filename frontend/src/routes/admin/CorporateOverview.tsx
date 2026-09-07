@@ -7,6 +7,7 @@ import { getLocations } from '../../services/locations'
 import { getShiftsForWeekAllLocations } from '../../services/shifts'
 import { LoadingState, ErrorState } from '../../components/shared/States'
 import { KpiStrip } from '../../components/admin/KpiStrip'
+import { LocationMap } from '../../components/admin/LocationMap'
 import { summarizeWeek } from '../../lib/rules'
 import { CURRENT_WEEK_START_KEY } from '../../lib/weeks'
 import { formatDateInZone } from '../../lib/timezone'
@@ -69,23 +70,25 @@ export function CorporateOverview() {
               {
                 label: 'Unfilled shifts this week',
                 value: String(totals.unfilled),
-                icon: <AlertOctagon size={14} className="text-brick" />,
+                icon: <AlertOctagon size={16} />,
                 tone: totals.unfilled > 0 ? 'brick' : 'ink',
               },
               {
                 label: 'Projected OT cost this week',
                 value: `$${totals.overtimeCost.toFixed(0)}`,
-                icon: <DollarSign size={14} className="text-flag" />,
+                icon: <DollarSign size={16} />,
                 tone: totals.overtimeCost > 0 ? 'flag' : 'ink',
               },
               {
                 label: 'Open violations needing attention',
                 value: String(totals.violations),
-                icon: <TriangleAlert size={14} className="text-amber-dark" />,
+                icon: <TriangleAlert size={16} />,
                 tone: totals.violations > 0 ? 'amber' : 'ink',
               },
             ]}
           />
+
+          <LocationMap rows={rows} />
 
           <div className="flex flex-col gap-1">
             <h2 className="text-body-xs font-semibold uppercase tracking-normal text-slate-500">Locations</h2>

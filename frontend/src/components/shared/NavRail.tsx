@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { ChevronsLeft, ChevronsRight, LogOut } from 'lucide-react'
 import { useUiStore } from '../../store/ui'
 import { useSessionStore } from '../../store/session'
+import logo from '../../assets/shiftsync-logo.svg'
 import type { LucideIcon } from 'lucide-react'
 
 export interface NavItem {
@@ -28,10 +29,11 @@ export function NavRail({ items, roleLabel }: { items: NavItem[]; roleLabel: str
     >
       <div>
         <div className="flex h-14 items-center gap-2 px-4">
-          <span className="grid h-6 w-6 shrink-0 grid-rows-3 gap-[2px]" aria-hidden="true">
-            <span className="rounded-[1px] bg-amber" />
-            <span className="rounded-[1px] bg-paper" />
-            <span className="rounded-[1px] bg-paper/60" />
+          {/* The mark's two dark bars are ink-colored, so on this ink sidebar it needs a
+              light chip behind it for contrast — not a recolor, just correct presentation
+              on a dark surface. */}
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[3px] bg-paper" aria-hidden="true">
+            <img src={logo} alt="" className="h-5 w-auto" />
           </span>
           <span className={`font-display text-display-sm ${labelClass}`}>ShiftSync</span>
         </div>

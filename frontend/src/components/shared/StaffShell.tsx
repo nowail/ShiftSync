@@ -5,6 +5,7 @@ import { useSessionStore } from '../../store/session'
 import { useUiStore } from '../../store/ui'
 import { NotificationCenter } from './NotificationCenter'
 import { getUnreadCount } from '../../services/notifications'
+import logo from '../../assets/shiftsync-logo.svg'
 
 const TABS = [
   { to: '/staff', label: 'Schedule', icon: CalendarDays, end: true },
@@ -25,7 +26,10 @@ export function StaffShell() {
       <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <div>
           <p className="text-body-xs text-slate-500">Hi {staffName?.split(' ')[0]}</p>
-          <p className="font-display text-display-sm text-ink">ShiftSync</p>
+          <div className="flex items-center gap-1.5">
+            <img src={logo} alt="" className="h-6 w-auto" />
+            <p className="font-display text-display-sm text-ink">ShiftSync</p>
+          </div>
         </div>
         <button
           onClick={openNotificationCenter}

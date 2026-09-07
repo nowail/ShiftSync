@@ -1,6 +1,17 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TriangleAlert } from 'lucide-react'
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { getShiftsForWeek, previewAssignment } from '../../services/shifts'
 import { getStaffByLocation } from '../../services/staff'
 import { getLocations } from '../../services/locations'
@@ -14,11 +25,23 @@ import { Badge } from '../../components/ui/Badge'
 import { Select } from '../../components/ui/Select'
 import { Tabs } from '../../components/ui/Tabs'
 import { LoadingState, ErrorState, EmptyState } from '../../components/shared/States'
-import { format, parseISO } from 'date-fns'
+import { addDays, format, parseISO } from 'date-fns'
 
 const DAILY_HARD_LIMIT = 12
 const WEEKLY_WARNING = 35
 const WEEKLY_REFERENCE = 40
+
+// Mirrors tailwind.config.ts — recharts renders SVG, so Tailwind classes don't apply.
+const COLOR = { brick: '#C1473F', flag: '#B8842E', ink: '#1C2333' }
+const LINE_COLORS = ['#1C2333', '#4B5169', '#656B82', '#868C9E']
+
+function trendDot(lineColor: string) {
+  return ({ cx, cy, value }: { cx?: number; cy?: number; value?: number }) => {
+    if (cx == null || cy == null || value == null) return <g />
+    const fill = value >= WEEKLY_REFERENCE ? COLOR.brick : value >= WEEKLY_WARNING ? COLOR.flag : lineColor
+    return <circle cx={cx} cy={cy} r={3} fill={fill} stroke="none" />
+  }
+}
 
 export function OvertimeDashboard() {
   const activeLocationId = useSessionStore((s) => s.activeLocationId)
@@ -64,6 +87,26 @@ export function OvertimeDashboard() {
       .sort((a, b) => b.totalHours - a.totalHours)
   }, [staffQuery.data, shiftsQuery.data, location, weekStart])
 
+  // The 3-4 staff closest to or over the weekly thresholds, so the trend chart stays
+  // readable instead of plotting everyone on the schedule.
+  const trendCandidates = useMemo(() => rows.slice(0, 4), [rows])
+
+  const trendData = useMemo(() => {
+    if (trendCandidates.length === 0) return []
+    const weekStartDate = parseISO(weekStart)
+    let running = trendCandidates.map(() => 0)
+    return Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = addDays(weekStartDate, dayIndex)
+      const dateKey = format(date, 'yyyy-MM-dd')
+      const point: Record<string, string | number> = { day: format(date, 'EEE') }
+      running = trendCandidates.map((candidate, i) => running[i] + (candidate.dailyHours.get(dateKey) ?? 0))
+      trendCandidates.forEach((candidate, i) => {
+        point[candidate.staff.name.split(' ')[0]] = running[i]
+      })
+      return point
+    })
+  }, [trendCandidates, weekStart])
+
   const unfilledShifts = shiftsQuery.data?.filter((s) => !s.assignedStaffId) ?? []
 
   const previewQuery = useQuery({
@@ -96,6 +139,54 @@ export function OvertimeDashboard() {
       {isError && <ErrorState message="Couldn't load overtime data." />}
       {!isLoading && !isError && rows.length === 0 && (
         <EmptyState title="No one is scheduled yet" body="Assign shifts on the board to see hours here." />
+      )}
+
+      {!isLoading && !isError && rows.length > 0 && (
+        <div className="rounded-md border border-slate-200 p-4">
+          <h2 className="mb-1 font-display text-display-sm text-ink">Hours so far this week</h2>
+          <p className="mb-2 text-body-xs text-slate-500">
+            The {trendCandidates.length} closest to the weekly thresholds — dots turn flag at 35h, brick at 40h.
+          </p>
+          <div style={{ width: '100%', height: 240 }}>
+            <ResponsiveContainer>
+              <LineChart data={trendData} margin={{ top: 8, right: 34, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="#E8E6DE" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#656B82' }} tickLine={false} axisLine={{ stroke: '#D3D1C7' }} />
+                <YAxis
+                  tickFormatter={(v) => `${v}h`}
+                  tick={{ fontSize: 11, fill: '#656B82' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                  domain={[0, 'dataMax + 4']}
+                />
+                <Tooltip
+                  formatter={(value) => `${Number(value).toFixed(1)}h`}
+                  contentStyle={{ borderColor: '#D3D1C7', borderRadius: 4, fontSize: 12 }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <ReferenceLine y={35} stroke={COLOR.flag} strokeDasharray="4 4" label={{ value: '35h', position: 'right', fill: COLOR.flag, fontSize: 11 }} />
+                <ReferenceLine y={40} stroke={COLOR.brick} strokeDasharray="4 4" label={{ value: '40h', position: 'right', fill: COLOR.brick, fontSize: 11 }} />
+                {trendCandidates.map((candidate, i) => {
+                  const name = candidate.staff.name.split(' ')[0]
+                  const color = LINE_COLORS[i % LINE_COLORS.length]
+                  return (
+                    <Line
+                      key={candidate.staff.id}
+                      type="monotone"
+                      dataKey={name}
+                      name={name}
+                      stroke={color}
+                      strokeWidth={2}
+                      dot={trendDot(color)}
+                      activeDot={{ r: 4 }}
+                    />
+                  )
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       )}
 
       {!isLoading && !isError && rows.length > 0 && (
