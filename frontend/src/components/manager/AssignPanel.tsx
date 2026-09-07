@@ -25,7 +25,9 @@ export function AssignPanel({
   onClose: () => void
 }) {
   const queryClient = useQueryClient()
-  const actor = useSessionStore((s) => ({ id: s.staffId!, name: s.staffName! }))
+  const staffId = useSessionStore((s) => s.staffId)!
+  const staffName = useSessionStore((s) => s.staffName)!
+  const actor = { id: staffId, name: staffName }
   const pushToast = useUiStore((s) => s.pushToast)
 
   const [blockedStaffId, setBlockedStaffId] = useState<string | null>(null)

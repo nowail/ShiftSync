@@ -11,7 +11,8 @@ const CONSECUTIVE_DAY_WARNING = 6
 const PUBLISH_CUTOFF_HOURS = 48
 
 export function isWithinPublishCutoff(shift: Shift, now: Date = new Date()): boolean {
-  return new Date(shift.startUtc).getTime() - now.getTime() < PUBLISH_CUTOFF_HOURS * 3600 * 1000
+  const msUntilStart = new Date(shift.startUtc).getTime() - now.getTime()
+  return msUntilStart >= 0 && msUntilStart < PUBLISH_CUTOFF_HOURS * 3600 * 1000
 }
 
 /** Groups shift "seats" that belong to the same board cell (same location/day/time/role). */

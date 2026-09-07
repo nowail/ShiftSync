@@ -32,7 +32,9 @@ interface RowGroup {
 
 export function ScheduleBoard() {
   const activeLocationId = useSessionStore((s) => s.activeLocationId)
-  const actor = useSessionStore((s) => ({ id: s.staffId!, name: s.staffName! }))
+  const staffId = useSessionStore((s) => s.staffId)!
+  const staffName = useSessionStore((s) => s.staffName)!
+  const actor = { id: staffId, name: staffName }
   const pushToast = useUiStore((s) => s.pushToast)
   const flashedShiftId = useUiStore((s) => s.flashedShiftId)
 
@@ -108,7 +110,7 @@ export function ScheduleBoard() {
           <h1 className="font-display text-display-lg text-ink">Schedule board</h1>
           <p className="text-body-sm text-slate-600">{location?.name ?? 'Loading location…'}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Tabs
             value={weekStart}
             onChange={setWeekStart}

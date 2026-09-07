@@ -24,7 +24,9 @@ export function LocationsUsers() {
   const [addLocationOpen, setAddLocationOpen] = useState(false)
   const [addStaffOpen, setAddStaffOpen] = useState(false)
 
-  const actor = useSessionStore((s) => ({ id: s.staffId!, name: s.staffName! }))
+  const staffId = useSessionStore((s) => s.staffId)!
+  const staffName = useSessionStore((s) => s.staffName)!
+  const actor = { id: staffId, name: staffName }
   const pushToast = useUiStore((s) => s.pushToast)
   const queryClient = useQueryClient()
 

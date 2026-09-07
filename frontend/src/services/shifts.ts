@@ -1,6 +1,6 @@
 import { db, nextDbId } from '../lib/db'
 import { withMockLatency } from '../lib/delay'
-import { evaluateAssignment, getEligibleCandidates as computeEligibleCandidates } from '../lib/rules'
+import { evaluateAssignment, getEligibleCandidates as computeEligibleCandidates, shiftsOverlap } from '../lib/rules'
 import { getAuditLog, pushAudit } from './audit'
 import { emitRealtimeEvent } from './realtime'
 import type { EligibleCandidate, Shift, SkillTag, Violation } from '../types'
@@ -27,9 +27,11 @@ export async function getClaimableShiftsForStaff(staffId: string): Promise<Shift
   return withMockLatency(() => {
     const staff = db.staff.find((s) => s.id === staffId)
     if (!staff) return []
+    const myShifts = db.shifts.filter((s) => s.assignedStaffId === staffId)
     return db.shifts
       .filter((s) => s.status === 'published' && !s.assignedStaffId && new Date(s.startUtc) > new Date())
       .filter((s) => staff.certifications.some((c) => c.locationId === s.locationId && c.skills.includes(s.role)))
+      .filter((s) => !myShifts.some((mine) => shiftsOverlap(mine, s)))
       .sort((a, b) => a.startUtc.localeCompare(b.startUtc))
   })
 }

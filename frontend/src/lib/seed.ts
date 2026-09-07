@@ -236,7 +236,10 @@ function buildShifts(): Shift[] {
         week.start,
         week.key,
         week.status,
-        ['usr-4', 'usr-1', 'usr-4', 'usr-1', 'usr-4', 'usr-1', 'usr-4'],
+        // Kayla (index 6, Sat) is intentionally not on the AM rotation that day — she
+        // already works the Saturday-night overnight shift below and this avoids stacking
+        // a 16-hour day on her.
+        ['usr-4', 'usr-1', 'usr-4', 'usr-1', 'usr-4', 'usr-1', 'usr-1'],
         ['usr-3', 'usr-5', 'usr-3', 'usr-5', 'usr-3', 'usr-5', 'usr-3'],
         'line',
         'grill',
@@ -271,16 +274,17 @@ function buildShifts(): Shift[] {
       ),
     )
 
-    // Harborview Boston — line AM + grill PM, both Elliot (only line/grill-certified there);
-    // several PM slots intentionally unfilled since Nina (prep/dish) can't cover them.
+    // Harborview Boston — line AM + grill PM, both Elliot (only line/grill-certified there).
+    // He alternates AM/PM rather than ever working both in the same day, and several slots
+    // are intentionally unfilled since Nina (prep/dish) can't cover them.
     shifts.push(
       ...buildRotationWeek(
         loc('loc-bos'),
         week.start,
         week.key,
         week.status,
-        ['usr-10', 'usr-10', null, 'usr-10', 'usr-10', null, 'usr-10'],
-        [null, 'usr-10', 'usr-10', null, null, 'usr-10', 'usr-10'],
+        ['usr-10', null, 'usr-10', null, 'usr-10', null, null],
+        [null, 'usr-10', null, 'usr-10', null, null, 'usr-10'],
         'line',
         'grill',
       ),

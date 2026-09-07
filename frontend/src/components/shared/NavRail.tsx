@@ -15,10 +15,14 @@ export function NavRail({ items, roleLabel }: { items: NavItem[]; roleLabel: str
   const toggleNav = useUiStore((s) => s.toggleNav)
   const logout = useSessionStore((s) => s.logout)
 
+  // Below `sm` the rail is always icon-only (no drawer state to manage); the manual
+  // collapse toggle only takes effect at `sm` and up.
+  const labelClass = `truncate ${collapsed ? 'hidden' : 'hidden sm:inline'}`
+
   return (
     <nav
-      className={`flex h-screen shrink-0 flex-col justify-between border-r border-slate-700/50 bg-ink text-paper transition-[width] duration-150 ${
-        collapsed ? 'w-16' : 'w-56'
+      className={`flex h-screen w-16 shrink-0 flex-col justify-between border-r border-slate-700/50 bg-ink text-paper transition-[width] duration-150 ${
+        collapsed ? 'sm:w-16' : 'sm:w-56'
       }`}
       aria-label="Primary"
     >
@@ -29,7 +33,7 @@ export function NavRail({ items, roleLabel }: { items: NavItem[]; roleLabel: str
             <span className="rounded-[1px] bg-paper" />
             <span className="rounded-[1px] bg-paper/60" />
           </span>
-          {!collapsed && <span className="truncate font-display text-display-sm">ShiftSync</span>}
+          <span className={`font-display text-display-sm ${labelClass}`}>ShiftSync</span>
         </div>
 
         <ul className="mt-2 flex flex-col gap-0.5 px-2">
@@ -43,10 +47,10 @@ export function NavRail({ items, roleLabel }: { items: NavItem[]; roleLabel: str
                     isActive ? 'bg-amber text-ink font-medium' : 'text-slate-300 hover:bg-white/5 hover:text-paper'
                   }`
                 }
-                title={collapsed ? item.label : undefined}
+                title={item.label}
               >
                 <item.icon size={18} className="shrink-0" aria-hidden="true" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
+                <span className={labelClass}>{item.label}</span>
               </NavLink>
             </li>
           ))}
@@ -54,21 +58,22 @@ export function NavRail({ items, roleLabel }: { items: NavItem[]; roleLabel: str
       </div>
 
       <div className="flex flex-col gap-1 border-t border-white/10 px-2 py-3">
-        {!collapsed && <p className="px-2.5 pb-1 text-body-xs text-slate-400">{roleLabel}</p>}
+        <p className={`px-2.5 pb-1 text-body-xs text-slate-400 ${labelClass}`}>{roleLabel}</p>
         <button
           onClick={logout}
           className="flex items-center gap-3 rounded-sm px-2.5 py-2 text-body-sm text-slate-300 hover:bg-white/5 hover:text-paper"
+          title="Sign out"
         >
           <LogOut size={18} aria-hidden="true" />
-          {!collapsed && <span>Sign out</span>}
+          <span className={labelClass}>Sign out</span>
         </button>
         <button
           onClick={toggleNav}
-          className="flex items-center gap-3 rounded-sm px-2.5 py-2 text-body-sm text-slate-300 hover:bg-white/5 hover:text-paper"
+          className="hidden items-center gap-3 rounded-sm px-2.5 py-2 text-body-sm text-slate-300 hover:bg-white/5 hover:text-paper sm:flex"
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
         >
           {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
-          {!collapsed && <span>Collapse</span>}
+          <span className={labelClass}>Collapse</span>
         </button>
       </div>
     </nav>

@@ -49,7 +49,9 @@ function StageStepper({ stage }: { stage: SwapStage }) {
 
 export function SwapApprovals() {
   const activeLocationId = useSessionStore((s) => s.activeLocationId)
-  const actor = useSessionStore((s) => ({ id: s.staffId!, name: s.staffName! }))
+  const staffId = useSessionStore((s) => s.staffId)!
+  const staffName = useSessionStore((s) => s.staffName)!
+  const actor = { id: staffId, name: staffName }
   const pushToast = useUiStore((s) => s.pushToast)
   const queryClient = useQueryClient()
 

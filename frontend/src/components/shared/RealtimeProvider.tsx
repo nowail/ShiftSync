@@ -29,11 +29,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ['presence'] })
       queryClient.invalidateQueries({ queryKey: ['audit'] })
     })
-    const stop = startScriptedRealtimeEvents()
-    return () => {
-      unsubscribe()
-      stop?.()
-    }
+    startScriptedRealtimeEvents()
+    return unsubscribe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
