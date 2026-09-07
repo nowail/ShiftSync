@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertOctagon, ArrowRight, CircleCheck, DollarSign, Users2 } from 'lucide-react'
+import { AlertOctagon, ArrowRight, Clock, DollarSign, TriangleAlert } from 'lucide-react'
+import { formatInTimeZone } from 'date-fns-tz'
 import { getLocations } from '../../services/locations'
 import { getShiftsForWeekAllLocations } from '../../services/shifts'
 import { LoadingState, ErrorState } from '../../components/shared/States'
-import { Badge } from '../../components/ui/Badge'
+import { KpiStrip } from '../../components/admin/KpiStrip'
 import { summarizeWeek } from '../../lib/rules'
 import { CURRENT_WEEK_START_KEY } from '../../lib/weeks'
 import { formatDateInZone } from '../../lib/timezone'
@@ -51,89 +52,85 @@ export function CorporateOverview() {
       </div>
 
       {isLoading && <LoadingState label="Loading overview…" />}
-      {isError && <ErrorState message="Couldn't load the corporate overview." onRetry={() => { locationsQuery.refetch(); shiftsQuery.refetch() }} />}
+      {isError && (
+        <ErrorState
+          message="Couldn't load the corporate overview."
+          onRetry={() => {
+            locationsQuery.refetch()
+            shiftsQuery.refetch()
+          }}
+        />
+      )}
 
       {!isLoading && !isError && (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <SummaryTile
-              icon={<DollarSign size={18} className="text-flag" />}
-              label="Projected OT cost this week"
-              value={`$${totals.overtimeCost.toFixed(0)}`}
-            />
-            <SummaryTile
-              icon={<AlertOctagon size={18} className="text-brick" />}
-              label="Unfilled shifts"
-              value={String(totals.unfilled)}
-            />
-            <SummaryTile
-              icon={<Users2 size={18} className="text-amber-dark" />}
-              label="Open violations"
-              value={String(totals.violations)}
-            />
-          </div>
+          <KpiStrip
+            stats={[
+              {
+                label: 'Unfilled shifts this week',
+                value: String(totals.unfilled),
+                icon: <AlertOctagon size={14} className="text-brick" />,
+                tone: totals.unfilled > 0 ? 'brick' : 'ink',
+              },
+              {
+                label: 'Projected OT cost this week',
+                value: `$${totals.overtimeCost.toFixed(0)}`,
+                icon: <DollarSign size={14} className="text-flag" />,
+                tone: totals.overtimeCost > 0 ? 'flag' : 'ink',
+              },
+              {
+                label: 'Open violations needing attention',
+                value: String(totals.violations),
+                icon: <TriangleAlert size={14} className="text-amber-dark" />,
+                tone: totals.violations > 0 ? 'amber' : 'ink',
+              },
+            ]}
+          />
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {rows.map(({ location, summary, todayFilled, todayTotal }) => (
-              <div key={location.id} className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white/40 p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h2 className="font-display text-display-sm text-ink">{location.name}</h2>
-                    <p className="text-body-xs text-slate-500">{location.city}</p>
-                  </div>
-                  {todayFilled === todayTotal && todayTotal > 0 ? (
-                    <Badge tone="moss">
-                      <CircleCheck size={12} /> Fully covered today
-                    </Badge>
-                  ) : (
-                    <Badge tone="brick">
-                      <AlertOctagon size={12} /> {todayTotal - todayFilled} open today
-                    </Badge>
-                  )}
-                </div>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-body-xs font-semibold uppercase tracking-normal text-slate-500">Locations</h2>
+            <div className="flex flex-col divide-y divide-slate-200 rounded-md border border-slate-200 bg-paper">
+              {rows.map(({ location, todayFilled, todayTotal }) => {
+                const fullyCovered = todayTotal > 0 && todayFilled === todayTotal
+                return (
+                  <div key={location.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:gap-6">
+                    <div className="sm:w-44 sm:shrink-0">
+                      <p className="font-display text-display-sm text-ink">{location.name}</p>
+                      <p className="text-body-xs text-slate-500">{location.city}</p>
+                    </div>
 
-                <dl className="grid grid-cols-3 gap-3 text-body-sm">
-                  <div>
-                    <dt className="text-body-xs text-slate-500">Today's coverage</dt>
-                    <dd className="font-display text-display-sm text-ink">
-                      {todayFilled}/{todayTotal || 0}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-body-xs text-slate-500">Projected OT cost</dt>
-                    <dd className="font-display text-display-sm text-ink">${summary.overtimeCost.toFixed(0)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-body-xs text-slate-500">Violations</dt>
-                    <dd className="font-display text-display-sm text-ink">
-                      {summary.hardViolations + summary.softViolations}
-                    </dd>
-                  </div>
-                </dl>
+                    <div className="flex flex-1 items-center gap-3">
+                      <div className="h-2 flex-1 rounded-full bg-slate-100">
+                        <div
+                          className={`h-2 rounded-full ${fullyCovered ? 'bg-moss' : 'bg-brick'}`}
+                          style={{ width: `${todayTotal > 0 ? (todayFilled / todayTotal) * 100 : 0}%` }}
+                        />
+                      </div>
+                      <span className={`shrink-0 text-body-xs font-medium ${fullyCovered ? 'text-moss' : 'text-brick'}`}>
+                        {todayFilled}/{todayTotal || 0} covered today
+                      </span>
+                    </div>
 
-                <Link
-                  to="/admin/fairness"
-                  className="flex items-center gap-1 text-body-xs font-medium text-ink hover:text-amber-dark"
-                >
-                  View fairness report <ArrowRight size={12} />
-                </Link>
-              </div>
-            ))}
+                    <div className="flex items-center gap-3 sm:w-40 sm:shrink-0 sm:justify-end">
+                      <span className="flex items-center gap-1 text-body-sm text-slate-600">
+                        <Clock size={13} className="text-slate-400" />
+                        {formatInTimeZone(new Date(), location.timezone, 'h:mm a')}
+                      </span>
+                      <Link
+                        to="/admin/fairness"
+                        aria-label={`View fairness report for ${location.name}`}
+                        className="text-slate-400 hover:text-amber-dark"
+                      >
+                        <ArrowRight size={14} />
+                      </Link>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-function SummaryTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-slate-200 bg-white/40 p-4">
-      <div className="rounded-sm bg-slate-100 p-2">{icon}</div>
-      <div>
-        <p className="text-body-xs text-slate-500">{label}</p>
-        <p className="font-display text-display-md text-ink">{value}</p>
-      </div>
     </div>
   )
 }
