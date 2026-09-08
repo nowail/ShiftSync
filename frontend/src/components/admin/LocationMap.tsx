@@ -43,17 +43,19 @@ export function LocationMap({ rows }: { rows: LocationMapRow[] }) {
       </div>
 
       <svg viewBox={`0 0 ${US_MAP_WIDTH} ${US_MAP_HEIGHT}`} className="w-full" role="img" aria-label="Map of Coastal Eats locations">
+        {/* State shapes are always neutral — status is a property of a location (a single
+            restaurant), not the state it happens to sit in, so it's never implied here.
+            States containing a location get a slightly bolder (still neutral) border, purely
+            so the map reads at a glance before you even look at the markers. */}
         {US_STATES.map((state) => {
-          const row = rows.find((r) => LOCATION_STATE_IDS[r.location.id] === state.id)
           const highlighted = highlightedStateIds.has(state.id)
-          const tone = row ? statusTone(row.summary) : null
           return (
             <path
               key={state.id}
               d={state.d}
-              fill={tone ? `${TONE_HEX[tone]}26` : '#E8E6DE'}
-              stroke={tone ? TONE_HEX[tone] : '#D3D1C7'}
-              strokeWidth={highlighted ? 1.25 : 0.75}
+              fill="#E8E6DE"
+              stroke={highlighted ? '#868C9E' : '#D3D1C7'}
+              strokeWidth={highlighted ? 1 : 0.75}
             />
           )
         })}
@@ -65,12 +67,15 @@ export function LocationMap({ rows }: { rows: LocationMapRow[] }) {
           const [x, y] = point
           return (
             <g key={row.location.id}>
+              {/* Status halo — the only place status color appears on the map. */}
               <circle
                 cx={x}
                 cy={y}
-                r={7}
-                fill={TONE_HEX[tone]}
-                fillOpacity={0.25}
+                r={10}
+                fill="none"
+                stroke={TONE_HEX[tone]}
+                strokeWidth={2}
+                strokeOpacity={0.35}
                 className={tone === 'brick' ? 'animate-pulse' : undefined}
               />
               <circle

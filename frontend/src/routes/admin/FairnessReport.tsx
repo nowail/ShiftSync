@@ -94,6 +94,13 @@ export function FairnessReport() {
     })
   }, [rows])
 
+  // Explicit domain fit to the real data (max of both series, +15% headroom), rather than
+  // relying on recharts' implicit auto-scaling — this is a small dataset (a handful of
+  // percentage-point values), and leaving the axis to guess its own ceiling is exactly the
+  // kind of thing that can silently pick a mismatched scale and compress every bar.
+  const chartMax = Math.max(1, ...chartData.flatMap((d) => [d.premiumShare, d.hoursShare]))
+  const chartDomain: [number, number] = [0, Math.ceil((chartMax * 1.15) / 5) * 5]
+
   // Ranked by each person's own premium-shift ratio (their personal "45% premium shifts"
   // stat); colored by the existing fairnessScore instead, since that's the one that already
   // accounts for how much they worked overall — a high premium % isn't inequitable on its
@@ -247,6 +254,7 @@ export function FairnessReport() {
                         axisLine={{ stroke: '#D3D1C7' }}
                       />
                       <YAxis
+                        domain={chartDomain}
                         tickFormatter={(v) => `${v}%`}
                         tick={{ fontSize: 11, fill: '#656B82' }}
                         tickLine={false}

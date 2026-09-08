@@ -6,6 +6,7 @@ import type {
   Location,
   Shift,
   ShiftStatus,
+  SkillTag,
   StaffAvailability,
   StaffMember,
   SwapRequest,
@@ -260,35 +261,72 @@ function buildShifts(): Shift[] {
       ),
     )
 
-    // Midtown NYC — line AM (Morgan), bar PM (Jamie)
+    // Midtown NYC — line AM (Morgan), bar PM (Jamie). Both already work 6 of 7 days here;
+    // the 7th slot is deliberately left off their rotation rather than posted-then-unfilled,
+    // since either working it would be a fresh (undocumented, unresolved) 7th-consecutive-day
+    // violation, and no one else at this location is certified to cover it.
+    const nycWeekShifts = buildRotationWeek(
+      loc('loc-nyc'),
+      week.start,
+      week.key,
+      week.status,
+      ['usr-8', 'usr-8', 'usr-8', 'usr-8', 'usr-8', 'usr-8', null],
+      ['usr-9', 'usr-9', 'usr-9', null, 'usr-9', 'usr-9', 'usr-9'],
+      'line',
+      'bar',
+    )
     shifts.push(
-      ...buildRotationWeek(
-        loc('loc-nyc'),
-        week.start,
-        week.key,
-        week.status,
-        ['usr-8', 'usr-8', 'usr-8', 'usr-8', 'usr-8', 'usr-8', null],
-        ['usr-9', 'usr-9', 'usr-9', null, 'usr-9', 'usr-9', 'usr-9'],
-        'line',
-        'bar',
-      ),
+      // Next week (draft) keeps both gaps visible so there's something to staff up before
+      // publishing; the current (published) week only ever shows shifts that are covered.
+      ...(week.status === 'published' ? nycWeekShifts.filter((s) => s.assignedStaffId) : nycWeekShifts),
     )
 
     // Harborview Boston — line AM + grill PM, both Elliot (only line/grill-certified there).
-    // He alternates AM/PM rather than ever working both in the same day, and several slots
-    // are intentionally unfilled since Nina (prep/dish) can't cover them.
-    shifts.push(
-      ...buildRotationWeek(
-        loc('loc-bos'),
-        week.start,
-        week.key,
-        week.status,
-        ['usr-10', null, 'usr-10', null, 'usr-10', null, null],
-        [null, 'usr-10', null, 'usr-10', null, null, 'usr-10'],
-        'line',
-        'grill',
-      ),
-    )
+    if (week.status === 'published') {
+      // Current week: a lean, fully-covered schedule — Elliot works 4 alternating shifts
+      // (never AM+PM the same day), comfortably under the 35h soft-warning threshold, so
+      // this location reads as genuinely fully staffed rather than posting shifts nobody
+      // can fill. See lib/rules.ts summarizeWeek/statusTone: a location's coverage status
+      // is driven directly by real unfilled/hours data, so this has to be a real, deliberate
+      // schedule — not a flag flipped after the fact.
+      const bos = loc('loc-bos')
+      const elliotShifts: { day: number; hhmm: [string, string]; role: SkillTag; premium?: boolean }[] = [
+        { day: 0, hhmm: ['07:00', '15:00'], role: 'line' }, // Sun AM
+        { day: 1, hhmm: ['15:00', '23:00'], role: 'grill' }, // Mon PM
+        { day: 3, hhmm: ['07:00', '15:00'], role: 'line' }, // Wed AM
+        { day: 5, hhmm: ['15:00', '23:00'], role: 'grill', premium: true }, // Fri PM
+      ]
+      for (const s of elliotShifts) {
+        const date = dayKey(week.start, s.day)
+        shifts.push({
+          id: nextId('sh'),
+          locationId: 'loc-bos',
+          weekStart: week.key,
+          date,
+          startUtc: zonedWallTimeToUtcIso(date, s.hhmm[0], bos.timezone),
+          endUtc: zonedWallTimeToUtcIso(date, s.hhmm[1], bos.timezone),
+          role: s.role,
+          assignedStaffId: 'usr-10',
+          status: week.status,
+          isPremium: !!s.premium,
+        })
+      }
+    } else {
+      // Next week (draft, not shown on the coverage map): the fuller rotation, with several
+      // slots intentionally unfilled since Nina (prep/dish) can't cover line/grill.
+      shifts.push(
+        ...buildRotationWeek(
+          loc('loc-bos'),
+          week.start,
+          week.key,
+          week.status,
+          ['usr-10', null, 'usr-10', null, 'usr-10', null, null],
+          [null, 'usr-10', null, 'usr-10', null, null, 'usr-10'],
+          'line',
+          'grill',
+        ),
+      )
+    }
     // Boston prep/dish coverage for Nina, separate from the line/grill rotation.
     for (const day of [0, 2, 4, 6]) {
       const date = dayKey(week.start, day)
@@ -450,12 +488,20 @@ function buildShifts(): Shift[] {
   // clicking through the assign flow.
   const pdx = loc('loc-pdx')
   const overrideDay = dayKey(CURRENT_WEEK_START, 6)
+  const overrideStartUtc = zonedWallTimeToUtcIso(overrideDay, '15:00', pdx.timezone)
+  // The generic rotation above already generated Saturday's PM grill seat (unfilled, since
+  // pmStaffIds[6] is null there) — remove it so this override fills that seat instead of
+  // sitting next to it as a phantom second, permanently-unfilled seat at the same slot.
+  const genericPdxSatIdx = shifts.findIndex(
+    (s) => s.locationId === 'loc-pdx' && s.role === 'grill' && s.startUtc === overrideStartUtc && !s.assignedStaffId,
+  )
+  if (genericPdxSatIdx !== -1) shifts.splice(genericPdxSatIdx, 1)
   shifts.push({
     id: 'sh-overtime-trap-override',
     locationId: 'loc-pdx',
     weekStart: CURRENT_WEEK_START_KEY,
     date: overrideDay,
-    startUtc: zonedWallTimeToUtcIso(overrideDay, '15:00', pdx.timezone),
+    startUtc: overrideStartUtc,
     endUtc: zonedWallTimeToUtcIso(overrideDay, '23:00', pdx.timezone),
     role: 'grill',
     assignedStaffId: 'usr-7',
