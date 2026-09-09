@@ -133,9 +133,6 @@ export function Login() {
           <Button type="submit" variant="primary" className="w-full" disabled={submitting}>
             {submitting ? 'Signing in…' : `Sign in as ${ROLE_OPTIONS.find((o) => o.role === role)?.label}`}
           </Button>
-          <p className="text-center text-body-xs text-slate-500">
-            Demo password for every seeded account: <span className="font-medium">{DEMO_LOGIN_PASSWORD}</span>
-          </p>
         </form>
       </div>
     </div>
