@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { requireAuth } from '../middleware/auth'
 import { ApiError } from '../middleware/errorHandler'
+import { paginationQuerySchema, paginateResult, toSkipTake } from '../lib/pagination'
 
 export const notificationsRouter = Router()
 
@@ -11,20 +12,27 @@ export const notificationsRouter = Router()
 // should) do better: scope to the authenticated user from the JWT. Same return shape,
 // no frontend change needed.
 notificationsRouter.get('/notifications', requireAuth, async (req, res) => {
-  const notifications = await prisma.notification.findMany({
-    where: { userId: req.user!.id },
-    orderBy: { createdAt: 'desc' },
-  })
+  const pagination = paginationQuerySchema.parse(req.query)
+  const where = { userId: req.user!.id }
+
+  const [totalItems, notifications] = await Promise.all([
+    prisma.notification.count({ where }),
+    prisma.notification.findMany({ where, orderBy: { createdAt: 'desc' }, ...toSkipTake(pagination) }),
+  ])
   res.json(
-    notifications.map((n) => ({
-      id: n.id,
-      kind: n.type,
-      title: n.title,
-      body: n.body,
-      createdAt: n.createdAt.toISOString(),
-      read: n.readAt !== null,
-      locationId: n.locationId ?? undefined,
-    })),
+    paginateResult(
+      notifications.map((n) => ({
+        id: n.id,
+        kind: n.type,
+        title: n.title,
+        body: n.body,
+        createdAt: n.createdAt.toISOString(),
+        read: n.readAt !== null,
+        locationId: n.locationId ?? undefined,
+      })),
+      totalItems,
+      pagination,
+    ),
   )
 })
 

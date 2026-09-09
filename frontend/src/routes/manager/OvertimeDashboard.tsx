@@ -23,6 +23,7 @@ import { Avatar } from '../../components/shared/Avatar'
 import { Badge } from '../../components/ui/Badge'
 import { Select } from '../../components/ui/Select'
 import { Tabs } from '../../components/ui/Tabs'
+import { PaginationControl } from '../../components/ui/PaginationControl'
 import { LoadingState, ErrorState, EmptyState } from '../../components/shared/States'
 import { addDays, format, parseISO } from 'date-fns'
 
@@ -64,16 +65,19 @@ export function OvertimeDashboard() {
     queryFn: () => getShiftsForWeek(activeLocationId!, weekStart),
     enabled: !!activeLocationId,
   })
+  const [overtimePage, setOvertimePage] = useState(1)
   const overtimeQuery = useQuery({
-    queryKey: ['overtime', activeLocationId, weekStart],
-    queryFn: () => getOvertimeSummary(activeLocationId!, weekStart),
+    queryKey: ['overtime', activeLocationId, weekStart, overtimePage],
+    queryFn: () => getOvertimeSummary(activeLocationId!, weekStart, overtimePage),
     enabled: !!activeLocationId,
   })
 
+  // Already sorted (highest hours first) and paginated server-side — this just joins each
+  // row with its staff record for display.
   const rows = useMemo(() => {
     if (!staffQuery.data || !overtimeQuery.data) return []
     const staffById = new Map(staffQuery.data.map((s) => [s.id, s]))
-    return overtimeQuery.data.rows
+    return overtimeQuery.data.items
       .map((row) => {
         const staff = staffById.get(row.staffId)
         if (!staff) return null
@@ -81,7 +85,6 @@ export function OvertimeDashboard() {
         return { staff, totalHours: row.totalHours, dailyHours, maxStreak: row.maxConsecutiveDays }
       })
       .filter((r): r is NonNullable<typeof r> => r !== null)
-      .sort((a, b) => b.totalHours - a.totalHours)
   }, [staffQuery.data, overtimeQuery.data])
 
   // The 3-4 staff closest to or over the weekly thresholds, so the trend chart stays
@@ -124,7 +127,10 @@ export function OvertimeDashboard() {
         </div>
         <Tabs
           value={weekStart}
-          onChange={setWeekStart}
+          onChange={(v) => {
+            setWeekStart(v)
+            setOvertimePage(1)
+          }}
           options={[
             { value: CURRENT_WEEK_START_KEY, label: 'This week' },
             { value: NEXT_WEEK_START_KEY, label: 'Next week' },
@@ -252,6 +258,14 @@ export function OvertimeDashboard() {
               </div>
             )
           })}
+          {overtimeQuery.data && (
+            <PaginationControl
+              page={overtimeQuery.data.page}
+              totalPages={overtimeQuery.data.totalPages}
+              totalItems={overtimeQuery.data.totalItems}
+              onPageChange={setOvertimePage}
+            />
+          )}
         </div>
       )}
 

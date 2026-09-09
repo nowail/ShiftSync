@@ -141,3 +141,14 @@ export interface FairnessRow {
   totalShiftCount: number
   fairnessScore: number // premium share relative to hours share
 }
+
+// The one envelope shape every paginated list endpoint returns — page-based, not
+// cursor-based (this app's scale doesn't need cursor pagination). pageSize is always
+// <=10, even if a caller asked for more; the backend clamps it silently.
+export interface Paginated<T> {
+  items: T[]
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}

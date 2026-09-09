@@ -1,8 +1,8 @@
 import { apiRequest } from '../lib/apiClient'
-import type { AppNotification, NotificationChannel } from '../types'
+import type { AppNotification, NotificationChannel, Paginated } from '../types'
 
-export async function getNotifications(): Promise<AppNotification[]> {
-  return apiRequest<AppNotification[]>('/notifications')
+export async function getNotifications(page = 1): Promise<Paginated<AppNotification>> {
+  return apiRequest<Paginated<AppNotification>>(`/notifications?page=${page}`)
 }
 
 export async function getUnreadCount(): Promise<number> {

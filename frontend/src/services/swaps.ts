@@ -1,15 +1,28 @@
-import { apiRequest } from '../lib/apiClient'
-import type { SwapRequest, SwapStage } from '../types'
+import { apiRequest, fetchAllPages } from '../lib/apiClient'
+import type { Paginated, SwapRequest, SwapStage } from '../types'
 
 export const PENDING_STAGES: SwapStage[] = ['requested', 'peer_accepted', 'awaiting_manager']
 export const MAX_PENDING_REQUESTS = 3
 
-export async function getSwaps(filters: { locationId?: string; staffId?: string } = {}): Promise<SwapRequest[]> {
+function swapsQueryString(filters: { locationId?: string; staffId?: string }, page?: number): string {
   const params = new URLSearchParams()
   if (filters.locationId) params.set('locationId', filters.locationId)
   if (filters.staffId) params.set('staffId', filters.staffId)
+  if (page) params.set('page', String(page))
   const qs = params.toString()
-  return apiRequest<SwapRequest[]>(`/swaps${qs ? `?${qs}` : ''}`)
+  return qs ? `?${qs}` : ''
+}
+
+// /swaps is genuinely paginated server-side (getSwapsPage below hits it directly), but
+// both existing screens that consume this function — the manager's approval queue and a
+// staff member's own request list — split the result into "pending/needs action" and
+// "resolved" sections client-side, and a manager must see every pending item, not just
+// whichever ones land on page 1. Rather than risk hiding an unactioned request behind a
+// pagination boundary, this keeps the pre-pagination "give me everything matching these
+// filters" contract by merging every page. In practice this is 1-2 requests for the data
+// volumes either screen deals with (a location's or a single staff member's swaps).
+export async function getSwaps(filters: { locationId?: string; staffId?: string } = {}): Promise<SwapRequest[]> {
+  return fetchAllPages((page) => apiRequest<Paginated<SwapRequest>>(`/swaps${swapsQueryString(filters, page)}`))
 }
 
 export async function getPendingSwapCount(staffId: string): Promise<number> {

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { getLocations, createLocation } from '../../services/locations'
-import { getStaff, createStaffMember, skillOptions } from '../../services/staff'
+import { getStaffPage, createStaffMember, skillOptions } from '../../services/staff'
 import { useSessionStore } from '../../store/session'
 import { useUiStore } from '../../store/ui'
 import { Tabs } from '../../components/ui/Tabs'
@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { Modal } from '../../components/ui/Modal'
+import { PaginationControl } from '../../components/ui/PaginationControl'
 import { Avatar } from '../../components/shared/Avatar'
 import { LoadingState, ErrorState, EmptyState } from '../../components/shared/States'
 import { roleLabel } from '../../lib/format'
@@ -23,6 +24,7 @@ export function LocationsUsers() {
   const [tab, setTab] = useState<'locations' | 'staff'>('locations')
   const [addLocationOpen, setAddLocationOpen] = useState(false)
   const [addStaffOpen, setAddStaffOpen] = useState(false)
+  const [staffPage, setStaffPage] = useState(1)
 
   const staffId = useSessionStore((s) => s.staffId)!
   const staffName = useSessionStore((s) => s.staffName)!
@@ -31,7 +33,8 @@ export function LocationsUsers() {
   const queryClient = useQueryClient()
 
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
-  const staffQuery = useQuery({ queryKey: ['staff'], queryFn: getStaff })
+  const staffQuery = useQuery({ queryKey: ['staff', staffPage], queryFn: () => getStaffPage(staffPage) })
+  const staffRows = staffQuery.data?.items ?? []
 
   const locationById = useMemo(
     () => new Map((locationsQuery.data ?? []).map((l) => [l.id, l])),
@@ -113,10 +116,13 @@ export function LocationsUsers() {
         <>
           {staffQuery.isLoading && <LoadingState label="Loading staff…" />}
           {staffQuery.isError && <ErrorState message="Couldn't load staff." onRetry={() => staffQuery.refetch()} />}
-          {staffQuery.data && (
+          {staffQuery.data && staffRows.length === 0 && (
+            <EmptyState title="No staff yet" body="Add the first staff member to get started." />
+          )}
+          {staffRows.length > 0 && (
             <Table
               rowKey={(row) => row.id}
-              rows={staffQuery.data}
+              rows={staffRows}
               columns={[
                 {
                   header: 'Name',
@@ -144,6 +150,14 @@ export function LocationsUsers() {
                 },
                 { header: 'Desired hrs/wk', render: (s) => s.desiredWeeklyHours },
               ]}
+            />
+          )}
+          {staffQuery.data && (
+            <PaginationControl
+              page={staffQuery.data.page}
+              totalPages={staffQuery.data.totalPages}
+              totalItems={staffQuery.data.totalItems}
+              onPageChange={setStaffPage}
             />
           )}
         </>

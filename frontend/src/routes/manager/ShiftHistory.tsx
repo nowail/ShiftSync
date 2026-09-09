@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { Search } from 'lucide-react'
 import { getAuditLog } from '../../services/audit'
+import { fetchAllPages } from '../../lib/apiClient'
 import { useSessionStore } from '../../store/session'
 import { Input } from '../../components/ui/Input'
 import { Table } from '../../components/ui/Table'
@@ -12,9 +13,17 @@ export function ShiftHistory() {
   const activeLocationId = useSessionStore((s) => s.activeLocationId)
   const [query, setQuery] = useState('')
 
+  // Not one of the paginated-with-a-visible-control screens: this one filters across two
+  // entity types (shift + week) client-side, which /audit's single `entity` filter can't
+  // express in one paginated fetch. fetchAllPages keeps this screen's existing "show
+  // everything matching" behavior correct now that the endpoint paginates, without
+  // inventing a new multi-entity filter on the backend for one screen.
   const auditQuery = useQuery({
     queryKey: ['audit', 'shift-history', activeLocationId, query],
-    queryFn: () => getAuditLog({ locationId: activeLocationId ?? undefined, query: query || undefined }),
+    queryFn: () =>
+      fetchAllPages((page) =>
+        getAuditLog({ locationId: activeLocationId ?? undefined, query: query || undefined }, { page }),
+      ),
   })
 
   const relevant = (auditQuery.data ?? []).filter((r) => r.entity === 'shift' || r.entity === 'week')

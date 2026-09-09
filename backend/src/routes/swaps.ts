@@ -13,6 +13,7 @@ import { isBlocking, isOverridableBlocking, evaluateAssignment } from '../engine
 import { performAssignment } from '../lib/performAssignment'
 import { emitToLocation } from '../lib/socket'
 import { cancelPresenceForAssignment } from '../lib/presenceScheduler'
+import { paginationQuerySchema, paginateResult, toSkipTake } from '../lib/pagination'
 
 export const swapsRouter = Router()
 
@@ -85,15 +86,17 @@ function toSwapRequest(swap: RawSwap) {
 swapsRouter.get('/swaps', requireAuth, async (req, res) => {
   const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined
   const staffId = typeof req.query.staffId === 'string' ? req.query.staffId : undefined
+  const pagination = paginationQuerySchema.parse(req.query)
+  const where = {
+    ...(locationId ? { shift: { locationId } } : {}),
+    ...(staffId ? { OR: [{ fromStaffId: staffId }, { toStaffId: staffId }] } : {}),
+  }
 
-  const swaps = await prisma.swapRequest.findMany({
-    where: {
-      ...(locationId ? { shift: { locationId } } : {}),
-      ...(staffId ? { OR: [{ fromStaffId: staffId }, { toStaffId: staffId }] } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-  })
-  res.json(swaps.map(toSwapRequest))
+  const [totalItems, swaps] = await Promise.all([
+    prisma.swapRequest.count({ where }),
+    prisma.swapRequest.findMany({ where, orderBy: { createdAt: 'desc' }, ...toSkipTake(pagination) }),
+  ])
+  res.json(paginateResult(swaps.map(toSwapRequest), totalItems, pagination))
 })
 
 swapsRouter.get('/staff/:staffId/swaps/pending-count', requireAuth, async (req, res) => {

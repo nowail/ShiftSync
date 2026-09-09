@@ -1,12 +1,22 @@
-import { apiRequest } from '../lib/apiClient'
-import type { Role, SkillTag, StaffCertification, StaffMember } from '../types'
+import { apiRequest, fetchAllPages } from '../lib/apiClient'
+import type { Paginated, Role, SkillTag, StaffCertification, StaffMember } from '../types'
 
+// /staff is genuinely paginated server-side (getStaffPage below, used by the Locations &
+// Users list). Every other screen that calls getStaff()/getStaffByLocation() uses it as a
+// full-roster lookup (names/avatars by id, the assign panel's candidate list source, swap
+// pickers) — truncating those to one page would silently make some staff members
+// unreachable through the UI. fetchAllPages keeps the pre-pagination "give me everyone"
+// contract for those call sites; only Locations & Users gets a real page-at-a-time fetch.
 export async function getStaff(): Promise<StaffMember[]> {
-  return apiRequest<StaffMember[]>('/staff')
+  return fetchAllPages((page) => apiRequest<Paginated<StaffMember>>(`/staff?page=${page}`))
 }
 
 export async function getStaffByLocation(locationId: string): Promise<StaffMember[]> {
-  return apiRequest<StaffMember[]>(`/staff?locationId=${encodeURIComponent(locationId)}`)
+  return fetchAllPages((page) => apiRequest<Paginated<StaffMember>>(`/staff?locationId=${encodeURIComponent(locationId)}&page=${page}`))
+}
+
+export async function getStaffPage(page: number, pageSize = 10): Promise<Paginated<StaffMember>> {
+  return apiRequest<Paginated<StaffMember>>(`/staff?page=${page}&pageSize=${pageSize}`)
 }
 
 export async function getStaffMember(id: string): Promise<StaffMember | undefined> {

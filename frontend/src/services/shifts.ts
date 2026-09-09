@@ -1,6 +1,6 @@
-import { apiRequest, ApiClientError } from '../lib/apiClient'
+import { apiRequest, ApiClientError, fetchAllPages } from '../lib/apiClient'
 import { getAuditLog } from './audit'
-import type { EligibleCandidate, Shift, SkillTag, Violation } from '../types'
+import type { EligibleCandidate, Paginated, Shift, SkillTag, Violation } from '../types'
 
 export async function getShiftsForWeek(locationId: string, weekStart: string): Promise<Shift[]> {
   return apiRequest<Shift[]>(`/shifts?locationId=${encodeURIComponent(locationId)}&weekStart=${weekStart}`)
@@ -14,21 +14,36 @@ export async function getShift(shiftId: string): Promise<Shift | undefined> {
   return apiRequest<Shift>(`/shifts/${shiftId}`)
 }
 
-export async function getClaimableShiftsForStaff(staffId: string): Promise<Shift[]> {
-  return apiRequest<Shift[]>(`/staff/${staffId}/shifts/claimable`)
+// Paginated (single consumer: StaffSwaps.tsx's "Open shifts you can claim" list) — a real
+// pagination control there, since no other screen needs the complete list.
+export async function getClaimableShiftsForStaffPage(staffId: string, page: number, pageSize = 10): Promise<Paginated<Shift>> {
+  return apiRequest<Paginated<Shift>>(`/staff/${staffId}/shifts/claimable?page=${page}&pageSize=${pageSize}`)
 }
 
 export async function getUpcomingShiftsForStaff(staffId: string): Promise<Shift[]> {
   return apiRequest<Shift[]>(`/staff/${staffId}/shifts/upcoming`)
 }
 
+// entityId filters server-side now (Phase 7) — previously fetched every shift-entity
+// audit entry system-wide and filtered to this one shift's id client-side, which broke
+// once /audit paginated (a shift's own edits could land on any page of the unfiltered,
+// company-wide feed). One shift's history is expected to be short; if it ever exceeds
+// one page (10 entries), only the most recent 10 show here.
 export async function getShiftHistory(shiftId: string) {
-  const rows = await getAuditLog({ entity: 'shift' })
-  return rows.filter((r) => r.entityId === shiftId)
+  const result = await getAuditLog({ entity: 'shift', entityId: shiftId })
+  return result.items
 }
 
+// Full roster's eligibility for one shift, unpaginated — used by the swap-request modal's
+// "who can I swap with" picker (StaffSwaps.tsx), which needs everyone who qualifies, not
+// just the first page. See getEligibleCandidatesPage for the Assign panel's paginated view
+// of the same underlying data.
 export async function getEligibleCandidates(shiftId: string): Promise<EligibleCandidate[]> {
-  return apiRequest<EligibleCandidate[]>(`/shifts/${shiftId}/candidates`)
+  return fetchAllPages((page) => apiRequest<Paginated<EligibleCandidate>>(`/shifts/${shiftId}/candidates?page=${page}`))
+}
+
+export async function getEligibleCandidatesPage(shiftId: string, page: number, pageSize = 10): Promise<Paginated<EligibleCandidate>> {
+  return apiRequest<Paginated<EligibleCandidate>>(`/shifts/${shiftId}/candidates?page=${page}&pageSize=${pageSize}`)
 }
 
 export async function previewAssignment(shiftId: string, staffId: string): Promise<Violation[]> {

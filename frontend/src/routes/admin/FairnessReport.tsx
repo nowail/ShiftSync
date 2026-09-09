@@ -12,9 +12,10 @@ import { Tabs } from '../../components/ui/Tabs'
 import { KpiStrip } from '../../components/admin/KpiStrip'
 import { Avatar } from '../../components/shared/Avatar'
 import { Badge } from '../../components/ui/Badge'
-import type { FairnessRow } from '../../types'
+import { PaginationControl } from '../../components/ui/PaginationControl'
+import type { FairnessSortKey } from '../../services/fairness'
 
-type SortKey = Exclude<keyof FairnessRow, 'staffId'>
+type SortKey = FairnessSortKey
 
 // Mirrors tailwind.config.ts — recharts renders SVG fills, so Tailwind classes don't apply.
 const COLOR = { moss: '#3E7C6B', flag: '#B8842E', brick: '#C1473F', slate300: '#ABAFBB' }
@@ -41,12 +42,20 @@ export function FairnessReport() {
   const [locationFilter, setLocationFilter] = useState<string>('all')
   const [sortKey, setSortKey] = useState<SortKey>('fairnessScore')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
 
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
   const staffQuery = useQuery({ queryKey: ['staff'], queryFn: getStaff })
   const fairnessQuery = useQuery({
-    queryKey: ['fairness', CURRENT_WEEK_START_KEY, locationFilter],
-    queryFn: () => getFairnessRows(CURRENT_WEEK_START_KEY, locationFilter === 'all' ? undefined : locationFilter),
+    queryKey: ['fairness', CURRENT_WEEK_START_KEY, locationFilter, sortKey, sortDir, page],
+    queryFn: () =>
+      getFairnessRows({
+        weekStart: CURRENT_WEEK_START_KEY,
+        locationId: locationFilter === 'all' ? undefined : locationFilter,
+        sortKey,
+        sortDir,
+        page,
+      }),
   })
   // The KPI strip's Lowest/Highest/Company average — always company-wide, regardless of
   // the table's location tab, matching the frontend's prior computeLocationFairness call
@@ -59,21 +68,17 @@ export function FairnessReport() {
   const isLoading = locationsQuery.isLoading || staffQuery.isLoading || fairnessQuery.isLoading || locationFairnessQuery.isLoading
   const isError = locationsQuery.isError || staffQuery.isError || fairnessQuery.isError || locationFairnessQuery.isError
 
+  // Sorting (and the zero-shift-staff filter) now happens server-side, before pagination —
+  // sorting only the current page's rows client-side would silently reorder just the 10
+  // rows in view instead of the whole result. This just joins each row with its staff
+  // record for display.
   const rows = useMemo(() => {
     if (!staffQuery.data || !fairnessQuery.data) return []
     const relevantStaff = staffQuery.data.filter((s) => s.role === 'staff')
-    const merged = fairnessQuery.data
+    return fairnessQuery.data.items
       .map((row) => ({ row, staff: relevantStaff.find((s) => s.id === row.staffId)! }))
-      .filter((r) => r.staff && r.row.totalShiftCount > 0)
-
-    merged.sort((a, b) => {
-      const av = a.row[sortKey]
-      const bv = b.row[sortKey]
-      const diff = (av === Infinity ? 999 : av) - (bv === Infinity ? 999 : bv)
-      return sortDir === 'asc' ? diff : -diff
-    })
-    return merged
-  }, [staffQuery.data, fairnessQuery.data, sortKey, sortDir])
+      .filter((r) => r.staff)
+  }, [staffQuery.data, fairnessQuery.data])
 
   // Both bars are shares of the same company-wide pool (hours pool, premium-shift pool) so
   // they land on a comparable scale — unlike the table's fairnessScore, which divides a
@@ -132,12 +137,18 @@ export function FairnessReport() {
     : 0
 
   function toggleSort(key: SortKey) {
+    setPage(1)
     if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortKey(key)
       setSortDir('desc')
     }
+  }
+
+  function changeLocationFilter(value: string) {
+    setLocationFilter(value)
+    setPage(1)
   }
 
   const columns: { key: SortKey; label: string }[] = [
@@ -188,7 +199,7 @@ export function FairnessReport() {
 
           <Tabs
             value={locationFilter}
-            onChange={setLocationFilter}
+            onChange={changeLocationFilter}
             options={[
               { value: 'all', label: 'All locations' },
               ...(locationsQuery.data ?? []).map((l) => ({ value: l.id, label: l.name })),
@@ -324,6 +335,15 @@ export function FairnessReport() {
                   </tbody>
                 </table>
               </div>
+
+              {fairnessQuery.data && (
+                <PaginationControl
+                  page={fairnessQuery.data.page}
+                  totalPages={fairnessQuery.data.totalPages}
+                  totalItems={fairnessQuery.data.totalItems}
+                  onPageChange={setPage}
+                />
+              )}
             </>
           )}
         </>

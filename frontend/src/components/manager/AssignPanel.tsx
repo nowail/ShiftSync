@@ -7,12 +7,13 @@ import { Badge } from '../ui/Badge'
 import { Avatar } from '../shared/Avatar'
 import { LoadingState } from '../shared/States'
 import { ViolationPanel } from '../shared/ViolationPanel'
-import { getEligibleCandidates, assignStaffToShift, unassignShift } from '../../services/shifts'
+import { getEligibleCandidates, getEligibleCandidatesPage, assignStaffToShift, unassignShift } from '../../services/shifts'
 import { getStaff } from '../../services/staff'
 import { useSessionStore } from '../../store/session'
 import { useUiStore } from '../../store/ui'
 import { roleLabel } from '../../lib/format'
 import { formatDateInZone, formatTimeInZone } from '../../lib/timezone'
+import { PaginationControl } from '../ui/PaginationControl'
 import type { Location, Shift } from '../../types'
 
 export function AssignPanel({
@@ -32,11 +33,25 @@ export function AssignPanel({
 
   const [blockedStaffId, setBlockedStaffId] = useState<string | null>(null)
   const [assigningId, setAssigningId] = useState<string | null>(null)
+  const [candidatesPage, setCandidatesPage] = useState(1)
 
   const staffQuery = useQuery({ queryKey: ['staff'], queryFn: getStaff })
+  // The browsable, paginated list for the main modal.
   const candidatesQuery = useQuery({
-    queryKey: ['shifts', shift.id, 'candidates'],
+    queryKey: ['shifts', shift.id, 'candidates', candidatesPage],
+    queryFn: () => getEligibleCandidatesPage(shift.id, candidatesPage),
+  })
+  const candidates = candidatesQuery.data?.items ?? []
+
+  // A blocked candidate's own violation, and the alternatives the ViolationPanel
+  // suggests, both need the *complete* roster regardless of which page the manager was
+  // browsing when they clicked "Try anyway" — the blocked person, or a good alternative,
+  // could easily be on a different page than the one currently shown. Only fetched once
+  // a block actually happens.
+  const fullCandidatesQuery = useQuery({
+    queryKey: ['shifts', shift.id, 'candidates', 'all'],
     queryFn: () => getEligibleCandidates(shift.id),
+    enabled: !!blockedStaffId,
   })
 
   const staffById = useMemo(() => new Map((staffQuery.data ?? []).map((s) => [s.id, s])), [staffQuery.data])
@@ -76,8 +91,20 @@ export function AssignPanel({
   })
 
   const blockedResult = blockedStaffId
-    ? candidatesQuery.data?.find((c) => c.staffId === blockedStaffId)
+    ? fullCandidatesQuery.data?.find((c) => c.staffId === blockedStaffId)
     : undefined
+
+  // While the complete-roster fetch for the violation panel is still in flight, show a
+  // loading state rather than falling through to the main modal — without this, the
+  // modal would flash back to the eligible-staff list for a moment before the violation
+  // panel actually has data to render.
+  if (blockedStaffId && fullCandidatesQuery.isLoading) {
+    return (
+      <Modal open onClose={() => setBlockedStaffId(null)} title="Assign staff" size="md">
+        <LoadingState label="Checking eligibility…" />
+      </Modal>
+    )
+  }
 
   if (blockedStaffId && blockedResult && staffById.get(blockedStaffId)) {
     return (
@@ -88,7 +115,7 @@ export function AssignPanel({
         location={location}
         attemptedStaff={staffById.get(blockedStaffId)!}
         violations={blockedResult.violations}
-        alternatives={(candidatesQuery.data ?? []).filter((c) => c.staffId !== blockedStaffId)}
+        alternatives={(fullCandidatesQuery.data ?? []).filter((c) => c.staffId !== blockedStaffId)}
         staffById={staffById}
         assigningStaffId={assigningId}
         onAssignAlternative={(staffId) => assignMutation.mutate({ staffId })}
@@ -132,7 +159,7 @@ export function AssignPanel({
           {(candidatesQuery.isLoading || staffQuery.isLoading) && <LoadingState label="Checking eligibility…" />}
           {candidatesQuery.data && (
             <ul className="flex max-h-80 flex-col gap-2 overflow-y-auto">
-              {candidatesQuery.data.map((candidate) => {
+              {candidates.map((candidate) => {
                 const staff = staffById.get(candidate.staffId)
                 if (!staff || staff.id === shift.assignedStaffId) return null
                 const hasSoft = candidate.violations.some((v) => v.severity === 'soft')
@@ -181,6 +208,14 @@ export function AssignPanel({
                 )
               })}
             </ul>
+          )}
+          {candidatesQuery.data && (
+            <PaginationControl
+              page={candidatesQuery.data.page}
+              totalPages={candidatesQuery.data.totalPages}
+              totalItems={candidatesQuery.data.totalItems}
+              onPageChange={setCandidatesPage}
+            />
           )}
         </div>
       </div>

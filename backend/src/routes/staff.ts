@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from '../middleware/auth'
 import { ApiError } from '../middleware/errorHandler'
 import { writeAudit } from '../lib/auditLog'
 import { hashPassword } from '../utils/password'
+import { paginationQuerySchema, paginateResult, toSkipTake } from '../lib/pagination'
 
 export const staffRouter = Router()
 
@@ -71,12 +72,14 @@ function toStaffMember(user: {
 
 staffRouter.get('/staff', requireAuth, async (req, res) => {
   const locationId = typeof req.query.locationId === 'string' ? req.query.locationId : undefined
-  const users = await prisma.user.findMany({
-    where: locationId ? { certifications: { some: { locationId, revokedAt: null } } } : undefined,
-    include: staffInclude,
-    orderBy: { name: 'asc' },
-  })
-  res.json(users.map(toStaffMember))
+  const pagination = paginationQuerySchema.parse(req.query)
+  const where = locationId ? { certifications: { some: { locationId, revokedAt: null } } } : undefined
+
+  const [totalItems, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({ where, include: staffInclude, orderBy: { name: 'asc' }, ...toSkipTake(pagination) }),
+  ])
+  res.json(paginateResult(users.map(toStaffMember), totalItems, pagination))
 })
 
 staffRouter.get('/staff/:id', requireAuth, async (req, res) => {

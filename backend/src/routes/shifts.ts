@@ -21,6 +21,7 @@ import { PENDING_SWAP_STAGES } from './swaps'
 import { emitToLocation } from '../lib/socket'
 import { cancelPresenceForAssignment, schedulePresenceForAssignment } from '../lib/presenceScheduler'
 import { isPremiumShift } from '../engine/timeHelpers'
+import { paginationQuerySchema, paginateArray } from '../lib/pagination'
 
 export const shiftsRouter = Router()
 
@@ -115,11 +116,12 @@ shiftsRouter.get('/staff/:staffId/shifts/upcoming', requireAuth, async (req, res
 
 shiftsRouter.get('/staff/:staffId/shifts/claimable', requireAuth, async (req, res) => {
   const staffId = String(req.params.staffId)
+  const pagination = paginationQuerySchema.parse(req.query)
   const [certs, myActiveAssignments] = await Promise.all([
     prisma.staffCertification.findMany({ where: { staffId, revokedAt: null }, include: { skill: true } }),
     prisma.assignment.findMany({ where: { staffId, status: 'active' }, include: { shift: true } }),
   ])
-  if (certs.length === 0) return res.json([])
+  if (certs.length === 0) return res.json(paginateArray([], pagination))
 
   const certifiedPairs = new Set(certs.map((c) => `${c.locationId}::${c.skill.key}`))
   const myRanges = myActiveAssignments.map((a) => ({ start: a.shift.startsAt, end: a.shift.endsAt }))
@@ -147,7 +149,10 @@ shiftsRouter.get('/staff/:staffId/shifts/claimable', requireAuth, async (req, re
     .flatMap((shift) => explodeShiftToSeats(shift, shift.assignments, timezoneByLocation.get(shift.locationId)!))
     .filter((seat) => seat.assignedStaffId === null)
     .sort((a, b) => a.startUtc.localeCompare(b.startUtc))
-  res.json(seats)
+  // The eligibility check above (certs + overlap) has to run over the full candidate set
+  // regardless of which page is requested — there's no WHERE clause to paginate at the DB
+  // level — so pagination here is a slice of the already-computed result, not a second query.
+  res.json(paginateArray(seats, pagination))
 })
 
 // ---------------------------------------------------------------------------
@@ -155,12 +160,17 @@ shiftsRouter.get('/staff/:staffId/shifts/claimable', requireAuth, async (req, re
 // ---------------------------------------------------------------------------
 
 shiftsRouter.get('/shifts/:id/candidates', requireAuth, async (req, res) => {
+  const pagination = paginationQuerySchema.parse(req.query)
   const shiftId = await resolveShiftIdFromSeatOrShiftId(String(req.params.id))
   if (!shiftId) throw new ApiError(404, 'not_found', 'Shift not found')
   const loaded = await loadShiftAndLocation(shiftId)
   if (!loaded) throw new ApiError(404, 'not_found', 'Shift not found')
+  // Evaluates the whole roster against this one shift regardless of which page is
+  // requested (the engine has no notion of "just check 10 people") — see candidates.ts's
+  // own comment on why this is already a handful of batched roster-wide queries, not
+  // per-candidate ones. Pagination here slices that already-computed result.
   const candidates = await computeCandidates(loaded.engineShift, loaded.engineLocation)
-  res.json(candidates)
+  res.json(paginateArray(candidates, pagination))
 })
 
 shiftsRouter.get('/shifts/:id/preview', requireAuth, async (req, res) => {

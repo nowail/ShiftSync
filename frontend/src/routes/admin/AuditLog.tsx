@@ -13,6 +13,7 @@ import { Tabs } from '../../components/ui/Tabs'
 import { KpiStrip } from '../../components/admin/KpiStrip'
 import { ActionBadge, actionLabel } from '../../components/admin/ActionBadge'
 import { Avatar } from '../../components/shared/Avatar'
+import { PaginationControl } from '../../components/ui/PaginationControl'
 import { format, parseISO } from 'date-fns'
 
 const ENTITY_OPTIONS = ['shift', 'week', 'swap', 'staff', 'location']
@@ -23,20 +24,34 @@ export function AuditLog() {
   const [locationId, setLocationId] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [page, setPage] = useState(1)
 
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
   const staffQuery = useQuery({ queryKey: ['staff'], queryFn: getStaff })
   const auditQuery = useQuery({
-    queryKey: ['audit', { query, entity, locationId, from, to }],
+    queryKey: ['audit', { query, entity, locationId, from, to, page }],
     queryFn: () =>
-      getAuditLog({
-        query: query || undefined,
-        entity: entity || undefined,
-        locationId: locationId || undefined,
-        from: from ? new Date(from).toISOString() : undefined,
-        to: to ? new Date(to).toISOString() : undefined,
-      }),
+      getAuditLog(
+        {
+          query: query || undefined,
+          entity: entity || undefined,
+          locationId: locationId || undefined,
+          from: from ? new Date(from).toISOString() : undefined,
+          to: to ? new Date(to).toISOString() : undefined,
+        },
+        { page },
+      ),
   })
+  const entries = auditQuery.data?.items ?? []
+
+  // Filters reset paging back to page 1 — otherwise a manager filtering down to a
+  // smaller result set could land on a now-nonexistent page 3.
+  function updateFilter(setter: (v: string) => void) {
+    return (value: string) => {
+      setter(value)
+      setPage(1)
+    }
+  }
 
   const staffByName = useMemo(
     () => new Map((staffQuery.data ?? []).map((s) => [s.name, s])),
@@ -47,12 +62,18 @@ export function AuditLog() {
     [locationsQuery.data],
   )
 
+  // These two KPIs are a "current page" approximation, not a true global aggregate —
+  // computing genuinely accurate "actions this week" / "most common action" totals across
+  // every filtered row would mean fetching every page, which defeats the point of
+  // paginating the main fetch. Page 1's default sort (most recent first) keeps this a
+  // reasonable at-a-glance signal for an active system, just not an exact count once
+  // there are more matching entries than fit on the current page.
   const weekStats = useMemo(() => {
-    if (!auditQuery.data || !locationsQuery.data) return null
-    return computeAuditWeekStats(auditQuery.data, locationsQuery.data)
-  }, [auditQuery.data, locationsQuery.data])
+    if (!locationsQuery.data) return null
+    return computeAuditWeekStats(entries, locationsQuery.data)
+  }, [entries, locationsQuery.data])
 
-  const dayCounts = useMemo(() => (auditQuery.data ? computeActionsPerDay(auditQuery.data) : []), [auditQuery.data])
+  const dayCounts = useMemo(() => computeActionsPerDay(entries), [entries])
 
   async function handleExport() {
     const csv = await exportAuditLogCsv({
@@ -111,21 +132,21 @@ export function AuditLog() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="relative col-span-2 sm:col-span-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} className="bg-paper pl-8" />
+            <Input placeholder="Search…" value={query} onChange={(e) => updateFilter(setQuery)(e.target.value)} className="bg-paper pl-8" />
           </div>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" className="bg-paper" />
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" className="bg-paper" />
+          <Input type="date" value={from} onChange={(e) => updateFilter(setFrom)(e.target.value)} aria-label="From date" className="bg-paper" />
+          <Input type="date" value={to} onChange={(e) => updateFilter(setTo)(e.target.value)} aria-label="To date" className="bg-paper" />
         </div>
 
         <div className="flex flex-col gap-2">
           <Tabs
             value={entity}
-            onChange={setEntity}
+            onChange={updateFilter(setEntity)}
             options={[{ value: '', label: 'All entities' }, ...ENTITY_OPTIONS.map((e) => ({ value: e, label: e }))]}
           />
           <Tabs
             value={locationId}
-            onChange={setLocationId}
+            onChange={updateFilter(setLocationId)}
             options={[
               { value: '', label: 'All locations' },
               ...(locationsQuery.data ?? []).map((l) => ({ value: l.id, label: l.name })),
@@ -136,11 +157,11 @@ export function AuditLog() {
 
       {auditQuery.isLoading && <LoadingState label="Loading audit log…" />}
       {auditQuery.isError && <ErrorState message="Couldn't load the audit log." onRetry={() => auditQuery.refetch()} />}
-      {auditQuery.data && auditQuery.data.length === 0 && (
+      {auditQuery.data && entries.length === 0 && (
         <EmptyState title="No matching audit entries" body="Try widening your filters or date range." />
       )}
 
-      {auditQuery.data && auditQuery.data.length > 0 && (
+      {auditQuery.data && entries.length > 0 && (
         <>
           {dayCounts.length > 1 && (
             <div className="rounded-md border border-slate-200 p-3">
@@ -177,7 +198,7 @@ export function AuditLog() {
                 </tr>
               </thead>
               <tbody>
-                {auditQuery.data.map((entry) => {
+                {entries.map((entry) => {
                   const actor = staffByName.get(entry.actorName)
                   return (
                     <tr key={entry.id} className="border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-100/60">
@@ -204,6 +225,15 @@ export function AuditLog() {
               </tbody>
             </table>
           </div>
+
+          {auditQuery.data && (
+            <PaginationControl
+              page={auditQuery.data.page}
+              totalPages={auditQuery.data.totalPages}
+              totalItems={auditQuery.data.totalItems}
+              onPageChange={setPage}
+            />
+          )}
         </>
       )}
     </div>

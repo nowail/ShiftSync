@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { requireAuth } from '../middleware/auth'
 import { computeOvertimeRows } from '../lib/analytics'
+import { paginationQuerySchema, paginateArray } from '../lib/pagination'
 
 export const overtimeRouter = Router()
 
@@ -16,11 +17,18 @@ const querySchema = z.object({ locationId: z.string(), weekStart: z.string() })
 // row list, including zero-hour staff.
 overtimeRouter.get('/overtime', requireAuth, async (req, res) => {
   const { locationId, weekStart } = querySchema.parse(req.query)
+  const pagination = paginationQuerySchema.parse(req.query)
   const staff = await prisma.user.findMany({
     where: { role: 'staff', certifications: { some: { locationId, revokedAt: null } } },
     select: { id: true },
   })
-  const rows = await computeOvertimeRows(locationId, weekStart, staff.map((s) => s.id))
-  const projectedWeeklyCost = rows.reduce((sum, r) => sum + r.overtimeCost, 0)
-  res.json({ rows, projectedWeeklyCost })
+  const unsorted = await computeOvertimeRows(locationId, weekStart, staff.map((s) => s.id))
+  // The cost projection is a location-wide total — computed from every row, not just the
+  // page being returned, then attached alongside the paginated envelope.
+  const projectedWeeklyCost = unsorted.reduce((sum, r) => sum + r.overtimeCost, 0)
+  // Sorted here, before pagination, matching the dashboard's original fixed
+  // highest-hours-first order — sorting after paginating would only reorder whichever 10
+  // rows happen to be on the current page, not the whole roster.
+  const rows = unsorted.sort((a, b) => b.totalHours - a.totalHours)
+  res.json({ ...paginateArray(rows, pagination), projectedWeeklyCost })
 })

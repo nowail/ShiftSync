@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { X, Bell, CalendarClock, RefreshCw, TriangleAlert, MessageSquare, Clock, CalendarCog } from 'lucide-react'
 import { createPortal } from 'react-dom'
@@ -6,6 +6,7 @@ import { format, isToday, isYesterday, parseISO } from 'date-fns'
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notifications'
 import { LoadingState, ErrorState, EmptyState } from './States'
 import { Button } from '../ui/Button'
+import { PaginationControl } from '../ui/PaginationControl'
 import type { AppNotification, NotificationKind } from '../../types'
 
 const ICONS: Record<NotificationKind, React.ReactNode> = {
@@ -27,11 +28,13 @@ function dayGroupLabel(iso: string): string {
 
 export function NotificationCenter({ open, onClose }: { open: boolean; onClose: () => void }) {
   const queryClient = useQueryClient()
+  const [page, setPage] = useState(1)
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: getNotifications,
+    queryKey: ['notifications', page],
+    queryFn: () => getNotifications(page),
     enabled: open,
   })
+  const items = data?.items ?? []
 
   const markReadMutation = useMutation({
     mutationFn: markNotificationRead,
@@ -43,15 +46,14 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose: 
   })
 
   const groups = useMemo(() => {
-    if (!data) return []
     const map = new Map<string, AppNotification[]>()
-    for (const n of data) {
+    for (const n of items) {
       const label = dayGroupLabel(n.createdAt)
       if (!map.has(label)) map.set(label, [])
       map.get(label)!.push(n)
     }
     return Array.from(map.entries())
-  }, [data])
+  }, [items])
 
   if (!open) return null
 
@@ -71,7 +73,7 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose: 
           </button>
         </div>
 
-        {data && data.length > 0 && (
+        {items.length > 0 && (
           <div className="flex justify-end border-b border-slate-100 px-5 py-2">
             <Button size="sm" variant="ghost" onClick={() => markAllReadMutation.mutate()}>
               Mark all read
@@ -82,7 +84,7 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose: 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {isLoading && <LoadingState label="Loading notifications…" />}
           {isError && <ErrorState message="Couldn't load notifications." onRetry={() => refetch()} />}
-          {!isLoading && !isError && data?.length === 0 && (
+          {!isLoading && !isError && items.length === 0 && (
             <EmptyState
               icon={<Bell size={20} className="text-slate-400" />}
               title="You're all caught up"
@@ -115,6 +117,12 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose: 
               </div>
             ))}
         </div>
+
+        {data && (
+          <div className="border-t border-slate-200 px-5 py-3">
+            <PaginationControl page={data.page} totalPages={data.totalPages} totalItems={data.totalItems} onPageChange={setPage} />
+          </div>
+        )}
       </div>
     </div>,
     document.body,

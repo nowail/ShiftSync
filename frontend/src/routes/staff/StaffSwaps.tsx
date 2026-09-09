@@ -10,7 +10,7 @@ import {
   PENDING_STAGES,
   MAX_PENDING_REQUESTS,
 } from '../../services/swaps'
-import { getUpcomingShiftsForStaff, getClaimableShiftsForStaff, getEligibleCandidates } from '../../services/shifts'
+import { getUpcomingShiftsForStaff, getClaimableShiftsForStaffPage, getEligibleCandidates } from '../../services/shifts'
 import { getStaff } from '../../services/staff'
 import { getLocations } from '../../services/locations'
 import { useSessionStore } from '../../store/session'
@@ -18,6 +18,7 @@ import { useUiStore } from '../../store/ui'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
 import { Modal } from '../../components/ui/Modal'
+import { PaginationControl } from '../../components/ui/PaginationControl'
 import { Avatar } from '../../components/shared/Avatar'
 import { LoadingState, EmptyState } from '../../components/shared/States'
 import { roleLabel } from '../../lib/format'
@@ -39,9 +40,14 @@ export function StaffSwaps() {
   const pushToast = useUiStore((s) => s.pushToast)
   const queryClient = useQueryClient()
   const [swapTargetShift, setSwapTargetShift] = useState<Shift | null>(null)
+  const [claimablePage, setClaimablePage] = useState(1)
 
   const myShiftsQuery = useQuery({ queryKey: ['shifts', 'staff', staffId], queryFn: () => getUpcomingShiftsForStaff(staffId) })
-  const claimableQuery = useQuery({ queryKey: ['shifts', 'claimable', staffId], queryFn: () => getClaimableShiftsForStaff(staffId) })
+  const claimableQuery = useQuery({
+    queryKey: ['shifts', 'claimable', staffId, claimablePage],
+    queryFn: () => getClaimableShiftsForStaffPage(staffId, claimablePage),
+  })
+  const claimableShifts = claimableQuery.data?.items ?? []
   const myRequestsQuery = useQuery({ queryKey: ['swaps', 'staff', staffId], queryFn: () => getSwaps({ staffId }) })
   const pendingCountQuery = useQuery({ queryKey: ['swaps', 'pending-count', staffId], queryFn: () => getPendingSwapCount(staffId) })
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
@@ -223,11 +229,11 @@ export function StaffSwaps() {
 
       <section>
         <h2 className="mb-2 text-body-xs font-semibold uppercase tracking-normal text-slate-500">Open shifts you can claim</h2>
-        {claimableQuery.data?.length === 0 && (
+        {claimableShifts.length === 0 && (
           <EmptyState title="No open shifts right now" body="Open shifts you're qualified for will show up here." />
         )}
         <div className="flex flex-col gap-2">
-          {claimableQuery.data?.map((shift) => {
+          {claimableShifts.map((shift) => {
             const location = locationById.get(shift.locationId)
             if (!location) return null
             return (
@@ -248,6 +254,14 @@ export function StaffSwaps() {
             )
           })}
         </div>
+        {claimableQuery.data && (
+          <PaginationControl
+            page={claimableQuery.data.page}
+            totalPages={claimableQuery.data.totalPages}
+            totalItems={claimableQuery.data.totalItems}
+            onPageChange={setClaimablePage}
+          />
+        )}
       </section>
 
       {swapTargetShift && (
