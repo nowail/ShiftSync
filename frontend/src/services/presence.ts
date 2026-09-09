@@ -1,5 +1,4 @@
-import { db } from '../lib/db'
-import { withMockLatency } from '../lib/delay'
+import { apiRequest } from '../lib/apiClient'
 
 export interface PresenceEntry {
   staffId: string
@@ -8,35 +7,11 @@ export interface PresenceEntry {
   shiftId: string
 }
 
-// Seed presence from whichever published shifts are currently in-progress.
-function computeInitialPresence(): PresenceEntry[] {
-  const now = Date.now()
-  return db.shifts
-    .filter(
-      (s) =>
-        s.status === 'published' &&
-        s.assignedStaffId &&
-        new Date(s.startUtc).getTime() <= now &&
-        new Date(s.endUtc).getTime() > now,
-    )
-    .map((s) => ({
-      staffId: s.assignedStaffId as string,
-      locationId: s.locationId,
-      clockedInAt: s.startUtc,
-      shiftId: s.id,
-    }))
-}
-
-let presence: PresenceEntry[] = computeInitialPresence()
-
+// Computed live at read time on the backend (published + currently in-progress
+// assignments) — this poll is the source of truth; the presence.clockIn/clockOut socket
+// events (see services/socket.ts) just prompt an early refetch instead of waiting for the
+// next interval.
 export async function getOnDutyNow(locationId?: string): Promise<PresenceEntry[]> {
-  return withMockLatency(() => presence.filter((p) => (locationId ? p.locationId === locationId : true)))
-}
-
-export function clockIn(entry: PresenceEntry) {
-  presence = [...presence.filter((p) => p.staffId !== entry.staffId), entry]
-}
-
-export function clockOut(staffId: string) {
-  presence = presence.filter((p) => p.staffId !== staffId)
+  const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : ''
+  return apiRequest<PresenceEntry[]>(`/presence${query}`)
 }

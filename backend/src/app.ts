@@ -12,6 +12,7 @@ import { swapsRouter } from './routes/swaps'
 import { notificationsRouter } from './routes/notifications'
 import { auditRouter } from './routes/audit'
 import { availabilityRouter } from './routes/availability'
+import { presenceRouter } from './routes/presence'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 
 export function createApp() {
@@ -35,6 +36,7 @@ export function createApp() {
   app.use(notificationsRouter)
   app.use(auditRouter)
   app.use(availabilityRouter)
+  app.use(presenceRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)
