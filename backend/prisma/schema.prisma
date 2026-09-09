@@ -43,22 +43,36 @@ enum SwapType {
   claim
 }
 
-// Matches frontend SwapStage exactly (types/index.ts).
+// Matches frontend SwapStage — extended in Phase 4 with `cancelled` (the mock had no
+// withdraw/auto-cancel path at all: no UI ever called it, and there was no stage value to
+// represent it). `expired` (drop requests past their 24h cutoff) is deliberately NOT a
+// stored value here — it's computed at read time from `expiresAt` per the documented
+// "hint column, not a source of truth" decision, so the persisted stage never needs to
+// change just because time passed. The frontend type still needs to accept `expired` as
+// a value it can be handed in an API response, even though it's never written to this
+// enum.
 enum SwapStage {
   requested
   peer_accepted
   awaiting_manager
   approved
   rejected
+  cancelled
 }
 
-// Matches frontend NotificationKind exactly (types/index.ts).
+// Matches frontend NotificationKind — extended in Phase 4 with two events from §7's
+// manager-facing list (overtime warning, availability change) that had no reasonable
+// existing value to reuse. "New shift assigned" / "shift change" (staff-facing) and
+// "swap/drop approval needed" (manager-facing) reuse `shift_reminder`/`swap_requested`
+// respectively rather than growing the enum further for events close enough in kind.
 enum NotificationType {
   schedule_published
   swap_resolved
   conflict
   swap_requested
   shift_reminder
+  overtime_warning
+  availability_changed
 }
 
 enum NotificationChannel {
@@ -89,6 +103,7 @@ model User {
   swapRequestsTo         SwapRequest[]           @relation("SwapTo")
   notifications          Notification[]
   notificationPreference NotificationPreference?
+  mockEmails             MockEmailOutbox[]
   auditLogs              AuditLog[]
 
   @@index([role])
@@ -286,6 +301,21 @@ model NotificationPreference {
   channel NotificationChannel @default(in_app)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Email is simulated per BACKEND_PROMPT Phase 4: a user on the in_app_plus_email channel
+// gets a row written here alongside their real in-app Notification, instead of an actual
+// email being sent. A log to inspect, not a queue anything processes.
+model MockEmailOutbox {
+  id        String   @id @default(cuid())
+  userId    String
+  subject   String
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // entityId is a polymorphic reference (Shift/SwapRequest/Location/User id depending on

@@ -1,28 +1,17 @@
-import { db, nextDbId } from '../lib/db'
-import { withMockLatency } from '../lib/delay'
+import { apiRequest } from '../lib/apiClient'
 import type { AvailabilityException, AvailabilityWindow, StaffAvailability } from '../types'
 
-function ensureRecord(staffId: string): StaffAvailability {
-  let record = db.availability.find((a) => a.staffId === staffId)
-  if (!record) {
-    record = { staffId, recurring: [], exceptions: [] }
-    db.availability.push(record)
-  }
-  return record
-}
-
 export async function getAvailability(staffId: string): Promise<StaffAvailability> {
-  return withMockLatency(() => ({ ...ensureRecord(staffId) }))
+  return apiRequest<StaffAvailability>(`/staff/${staffId}/availability`)
 }
 
 export async function setRecurringWindows(
   staffId: string,
   windows: Omit<AvailabilityWindow, 'id'>[],
 ): Promise<StaffAvailability> {
-  return withMockLatency(() => {
-    const record = ensureRecord(staffId)
-    record.recurring = windows.map((w) => ({ id: nextDbId('av'), ...w }))
-    return { ...record }
+  return apiRequest<StaffAvailability>(`/staff/${staffId}/availability/recurring`, {
+    method: 'PUT',
+    body: { windows },
   })
 }
 
@@ -30,17 +19,14 @@ export async function addException(
   staffId: string,
   exception: Omit<AvailabilityException, 'id'>,
 ): Promise<StaffAvailability> {
-  return withMockLatency(() => {
-    const record = ensureRecord(staffId)
-    record.exceptions.push({ id: nextDbId('exc'), ...exception })
-    return { ...record }
+  return apiRequest<StaffAvailability>(`/staff/${staffId}/availability/exceptions`, {
+    method: 'POST',
+    body: exception,
   })
 }
 
 export async function removeException(staffId: string, exceptionId: string): Promise<StaffAvailability> {
-  return withMockLatency(() => {
-    const record = ensureRecord(staffId)
-    record.exceptions = record.exceptions.filter((e) => e.id !== exceptionId)
-    return { ...record }
+  return apiRequest<StaffAvailability>(`/staff/${staffId}/availability/exceptions/${exceptionId}`, {
+    method: 'DELETE',
   })
 }

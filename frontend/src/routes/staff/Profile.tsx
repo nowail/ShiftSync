@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getStaffMember, updateAvailabilityPreferences } from '../../services/staff'
 import { getLocations } from '../../services/locations'
+import { getNotificationPreference, setNotificationPreference } from '../../services/notifications'
 import { useSessionStore } from '../../store/session'
 import { useUiStore } from '../../store/ui'
 import { Avatar } from '../../components/shared/Avatar'
@@ -10,6 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { LoadingState, ErrorState } from '../../components/shared/States'
 import { roleLabel } from '../../lib/format'
+import type { NotificationChannel } from '../../types'
 
 export function Profile() {
   const staffId = useSessionStore((s) => s.staffId)!
@@ -25,6 +27,15 @@ export function Profile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId] })
       pushToast({ title: 'Preferences saved', tone: 'success' })
+    },
+  })
+
+  const notificationPrefQuery = useQuery({ queryKey: ['notification-preference'], queryFn: getNotificationPreference })
+  const notificationPrefMutation = useMutation({
+    mutationFn: (channel: NotificationChannel) => setNotificationPreference(channel),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notification-preference'] })
+      pushToast({ title: 'Notification preference saved', tone: 'success' })
     },
   })
 
@@ -87,6 +98,22 @@ export function Profile() {
           </Button>
         </div>
         <p className="mt-1 text-body-xs text-slate-500">Currently set to {staff.desiredWeeklyHours}h/week.</p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-body-xs font-semibold uppercase tracking-normal text-slate-500">
+          Notifications
+        </h2>
+        <label className="flex items-center gap-2 text-body-sm text-ink">
+          <input
+            type="checkbox"
+            checked={notificationPrefQuery.data === 'in_app_plus_email'}
+            disabled={notificationPrefQuery.isLoading || notificationPrefMutation.isPending}
+            onChange={(e) => notificationPrefMutation.mutate(e.target.checked ? 'in_app_plus_email' : 'in_app')}
+          />
+          Also send email notifications
+        </label>
+        <p className="mt-1 text-body-xs text-slate-500">Email is simulated for this demo — nothing is actually sent.</p>
       </section>
     </div>
   )

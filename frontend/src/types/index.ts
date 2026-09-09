@@ -64,7 +64,11 @@ export interface EligibleCandidate {
   violations: Violation[]
 }
 
-export type SwapStage = 'requested' | 'peer_accepted' | 'awaiting_manager' | 'approved' | 'rejected'
+// 'cancelled' (Phase 4): withdrawn by the requester (Regret Swap) or auto-cancelled
+// because the manager edited the shift while the request was still pending. 'expired'
+// is never actually stored — it's computed at read time for a `drop` request whose
+// shift starts within 24h and is still pending, per the documented no-cron decision.
+export type SwapStage = 'requested' | 'peer_accepted' | 'awaiting_manager' | 'approved' | 'rejected' | 'cancelled' | 'expired'
 
 export interface SwapRequest {
   id: string
@@ -83,6 +87,8 @@ export type NotificationKind =
   | 'conflict'
   | 'swap_requested'
   | 'shift_reminder'
+  | 'overtime_warning' // backend Phase 4 — manager-facing, §7
+  | 'availability_changed' // backend Phase 4 — manager-facing, §7
 
 export interface AppNotification {
   id: string
@@ -125,6 +131,8 @@ export interface StaffAvailability {
   recurring: AvailabilityWindow[]
   exceptions: AvailabilityException[]
 }
+
+export type NotificationChannel = 'in_app' | 'in_app_plus_email'
 
 export interface FairnessRow {
   staffId: string

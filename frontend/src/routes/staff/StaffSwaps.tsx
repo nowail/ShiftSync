@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeftRight, LogOut, PlusCircle } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, Check, LogOut, PlusCircle, X, XCircle } from 'lucide-react'
 import {
   getSwaps,
   createSwapRequest,
   getPendingSwapCount,
+  respondAsPeer,
+  withdrawSwapRequest,
+  PENDING_STAGES,
   MAX_PENDING_REQUESTS,
 } from '../../services/swaps'
 import { getUpcomingShiftsForStaff, getClaimableShiftsForStaff, getEligibleCandidates } from '../../services/shifts'
@@ -27,6 +30,8 @@ const STAGE_LABELS: Record<SwapStage, { label: string; tone: 'slate' | 'amber' |
   awaiting_manager: { label: 'Awaiting manager', tone: 'amber' },
   approved: { label: 'Approved', tone: 'moss' },
   rejected: { label: 'Rejected', tone: 'brick' },
+  cancelled: { label: 'Cancelled', tone: 'slate' },
+  expired: { label: 'Expired', tone: 'slate' },
 }
 
 export function StaffSwaps() {
@@ -69,6 +74,31 @@ export function StaffSwaps() {
     onError: (err: Error) => pushToast({ title: 'Could not claim shift', body: err.message, tone: 'danger' }),
   })
 
+  const respondMutation = useMutation({
+    mutationFn: (vars: { swapId: string; accept: boolean }) => respondAsPeer(vars.swapId, vars.accept),
+    onSuccess: (_result, vars) => {
+      invalidateAfterRequest()
+      pushToast({
+        title: vars.accept ? 'Swap accepted' : 'Swap declined',
+        body: vars.accept ? "Sent to your manager for final approval." : undefined,
+        tone: vars.accept ? 'success' : 'info',
+      })
+    },
+    onError: (err: Error) => pushToast({ title: 'Could not respond to swap', body: err.message, tone: 'danger' }),
+  })
+
+  const withdrawMutation = useMutation({
+    mutationFn: (swapId: string) => withdrawSwapRequest(swapId),
+    onSuccess: () => {
+      invalidateAfterRequest()
+      pushToast({ title: 'Request withdrawn', tone: 'info' })
+    },
+    onError: (err: Error) => pushToast({ title: 'Could not withdraw request', body: err.message, tone: 'danger' }),
+  })
+
+  const myOutgoingRequests = (myRequestsQuery.data ?? []).filter((r) => r.requestingStaffId === staffId)
+  const incomingRequests = (myRequestsQuery.data ?? []).filter((r) => r.targetStaffId === staffId && r.stage === 'requested')
+
   return (
     <div className="flex flex-col gap-6 p-4">
       <div>
@@ -86,23 +116,73 @@ export function StaffSwaps() {
         {atCap && ' — resolve one before requesting another.'}
       </div>
 
+      {incomingRequests.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-body-xs font-semibold uppercase tracking-normal text-slate-500">Waiting on you</h2>
+          <div className="flex flex-col gap-2">
+            {incomingRequests.map((req) => {
+              const shift = shiftById.get(req.shiftId)
+              return (
+                <div key={req.id} className="flex items-center justify-between rounded-md border border-amber/40 bg-flag-light/40 p-3">
+                  <span className="text-body-sm text-ink">
+                    Swap request
+                    {shift && ` · ${roleLabel(shift.role)} ${formatDateInZone(shift.startUtc, locationById.get(shift.locationId)?.timezone ?? 'UTC')}`}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={respondMutation.isPending}
+                      onClick={() => respondMutation.mutate({ swapId: req.id, accept: true })}
+                    >
+                      <Check size={14} /> Accept
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={respondMutation.isPending}
+                      onClick={() => respondMutation.mutate({ swapId: req.id, accept: false })}
+                    >
+                      <X size={14} /> Decline
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       <section>
         <h2 className="mb-2 text-body-xs font-semibold uppercase tracking-normal text-slate-500">My requests</h2>
         {myRequestsQuery.isLoading && <LoadingState label="Loading requests…" />}
-        {myRequestsQuery.data?.length === 0 && (
+        {myOutgoingRequests.length === 0 && !myRequestsQuery.isLoading && (
           <EmptyState title="No swap requests yet" body="Requests you make will appear here with their status." />
         )}
         <div className="flex flex-col gap-2">
-          {myRequestsQuery.data?.map((req) => {
+          {myOutgoingRequests.map((req) => {
             const shift = shiftById.get(req.shiftId)
             const stage = STAGE_LABELS[req.stage]
+            const canWithdraw = PENDING_STAGES.includes(req.stage)
             return (
               <div key={req.id} className="flex items-center justify-between rounded-sm border border-slate-200 p-3">
                 <span className="text-body-sm text-ink">
                   {req.type === 'swap' ? 'Swap' : req.type === 'drop' ? 'Drop' : 'Claim'}
                   {shift && ` · ${roleLabel(shift.role)} ${formatDateInZone(shift.startUtc, locationById.get(shift.locationId)?.timezone ?? 'UTC')}`}
                 </span>
-                <Badge tone={stage.tone}>{stage.label}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge tone={stage.tone}>{stage.label}</Badge>
+                  {canWithdraw && (
+                    <button
+                      onClick={() => withdrawMutation.mutate(req.id)}
+                      disabled={withdrawMutation.isPending}
+                      aria-label="Withdraw request"
+                      className="text-slate-400 hover:text-brick"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  )}
+                </div>
               </div>
             )
           })}

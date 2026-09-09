@@ -1,14 +1,12 @@
-import { db, nextDbId } from '../lib/db'
-import { withMockLatency } from '../lib/delay'
-import { pushAudit } from './audit'
+import { apiRequest } from '../lib/apiClient'
 import type { Location } from '../types'
 
 export async function getLocations(): Promise<Location[]> {
-  return withMockLatency(() => [...db.locations])
+  return apiRequest<Location[]>('/locations')
 }
 
 export async function getLocation(id: string): Promise<Location | undefined> {
-  return withMockLatency(() => db.locations.find((l) => l.id === id))
+  return apiRequest<Location>(`/locations/${id}`)
 }
 
 export interface CreateLocationInput {
@@ -17,44 +15,16 @@ export interface CreateLocationInput {
   timezone: string
 }
 
-export async function createLocation(
-  input: CreateLocationInput,
-  actor: { id: string; name: string },
-): Promise<Location> {
-  return withMockLatency(() => {
-    const location: Location = { id: nextDbId('loc'), ...input }
-    db.locations.push(location)
-    pushAudit({
-      actorId: actor.id,
-      actorName: actor.name,
-      action: 'created_location',
-      entity: 'location',
-      entityId: location.id,
-      locationId: location.id,
-      details: `Added location "${location.name}" (${location.timezone}).`,
-    })
-    return location
-  })
+// actor is unused now — the backend derives the actor from the JWT and requires admin
+// role for both of these. Kept in the signature so call sites don't need to change.
+export async function createLocation(input: CreateLocationInput, _actor: { id: string; name: string }): Promise<Location> {
+  return apiRequest<Location>('/locations', { method: 'POST', body: input })
 }
 
 export async function updateLocation(
   id: string,
   patch: Partial<CreateLocationInput>,
-  actor: { id: string; name: string },
+  _actor: { id: string; name: string },
 ): Promise<Location> {
-  return withMockLatency(() => {
-    const location = db.locations.find((l) => l.id === id)
-    if (!location) throw new Error('Location not found.')
-    Object.assign(location, patch)
-    pushAudit({
-      actorId: actor.id,
-      actorName: actor.name,
-      action: 'updated_location',
-      entity: 'location',
-      entityId: location.id,
-      locationId: location.id,
-      details: `Updated location "${location.name}".`,
-    })
-    return location
-  })
+  return apiRequest<Location>(`/locations/${id}`, { method: 'PATCH', body: patch })
 }

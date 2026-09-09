@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
-import { X, Bell, CalendarClock, RefreshCw, TriangleAlert, MessageSquare } from 'lucide-react'
+import { X, Bell, CalendarClock, RefreshCw, TriangleAlert, MessageSquare, Clock, CalendarCog } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { format, isToday, isYesterday, parseISO } from 'date-fns'
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from '../../services/notifications'
@@ -14,6 +14,8 @@ const ICONS: Record<NotificationKind, React.ReactNode> = {
   conflict: <TriangleAlert size={16} className="text-brick" />,
   swap_requested: <MessageSquare size={16} className="text-amber-dark" />,
   shift_reminder: <Bell size={16} className="text-amber-dark" />,
+  overtime_warning: <Clock size={16} className="text-brick" />,
+  availability_changed: <CalendarCog size={16} className="text-amber-dark" />,
 }
 
 function dayGroupLabel(iso: string): string {

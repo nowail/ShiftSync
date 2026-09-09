@@ -21,6 +21,8 @@ const STAGE_LABELS: Record<SwapStage, string> = {
   awaiting_manager: 'Awaiting your approval',
   approved: 'Approved',
   rejected: 'Rejected',
+  cancelled: 'Cancelled',
+  expired: 'Expired',
 }
 
 const STAGE_ORDER: SwapStage[] = ['requested', 'peer_accepted', 'awaiting_manager']
@@ -28,6 +30,8 @@ const STAGE_ORDER: SwapStage[] = ['requested', 'peer_accepted', 'awaiting_manage
 function StageStepper({ stage }: { stage: SwapStage }) {
   if (stage === 'approved') return <Badge tone="moss">Approved</Badge>
   if (stage === 'rejected') return <Badge tone="brick">Rejected</Badge>
+  if (stage === 'cancelled') return <Badge tone="slate">Cancelled</Badge>
+  if (stage === 'expired') return <Badge tone="slate">Expired</Badge>
   const currentIdx = STAGE_ORDER.indexOf(stage)
   return (
     <div className="flex items-center gap-1.5">
@@ -90,8 +94,13 @@ export function SwapApprovals() {
     },
   })
 
-  const pending = (swapsQuery.data ?? []).filter((s) => s.stage !== 'approved' && s.stage !== 'rejected')
-  const resolved = (swapsQuery.data ?? []).filter((s) => s.stage === 'approved' || s.stage === 'rejected')
+  const TERMINAL_STAGES: SwapStage[] = ['approved', 'rejected', 'cancelled']
+  // 'expired' is deliberately kept out of both buckets' opposite: it's non-actionable
+  // (like a terminal stage) but still worth surfacing as "pending, nothing to do" rather
+  // than filed away as resolved — a manager scanning pending requests should see *why*
+  // one isn't actionable, not have it silently vanish into history.
+  const pending = (swapsQuery.data ?? []).filter((s) => !TERMINAL_STAGES.includes(s.stage))
+  const resolved = (swapsQuery.data ?? []).filter((s) => TERMINAL_STAGES.includes(s.stage))
 
   return (
     <div className="flex flex-col gap-6 px-4 sm:px-6">
@@ -113,7 +122,8 @@ export function SwapApprovals() {
             const requester = staffById.get(swap.requestingStaffId)
             const target = swap.targetStaffId ? staffById.get(swap.targetStaffId) : undefined
             const location = shift ? locationsQuery.data?.find((l) => l.id === shift.locationId) : undefined
-            const canAct = swap.stage === 'awaiting_manager' || swap.type !== 'swap'
+            const isExpired = swap.stage === 'expired'
+            const canAct = !isExpired && (swap.stage === 'awaiting_manager' || swap.type !== 'swap')
             return (
               <div key={swap.id} className="flex flex-col gap-3 rounded-md border border-slate-200 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -145,14 +155,14 @@ export function SwapApprovals() {
                   <Button
                     size="sm"
                     variant="danger"
-                    disabled={rejectMutation.isPending}
+                    disabled={isExpired || rejectMutation.isPending}
                     onClick={() => rejectMutation.mutate(swap.id)}
                   >
                     <X size={14} /> Reject
                   </Button>
                   {!canAct && (
                     <span className="flex items-center gap-1 text-body-xs text-slate-500">
-                      <Clock size={12} /> Waiting on peer acceptance
+                      <Clock size={12} /> {isExpired ? 'Expired — the shift starts within 24 hours' : 'Waiting on peer acceptance'}
                     </span>
                   )}
                 </div>
