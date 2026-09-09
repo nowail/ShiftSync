@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { LogOut } from 'lucide-react'
 import { getStaffMember, updateAvailabilityPreferences } from '../../services/staff'
 import { getLocations } from '../../services/locations'
 import { getNotificationPreference, setNotificationPreference } from '../../services/notifications'
@@ -15,6 +16,7 @@ import type { NotificationChannel } from '../../types'
 
 export function Profile() {
   const staffId = useSessionStore((s) => s.staffId)!
+  const logout = useSessionStore((s) => s.logout)
   const pushToast = useUiStore((s) => s.pushToast)
   const queryClient = useQueryClient()
 
@@ -114,6 +116,13 @@ export function Profile() {
           Also send email notifications
         </label>
         <p className="mt-1 text-body-xs text-slate-500">Email is simulated for this demo — nothing is actually sent.</p>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-body-xs font-semibold uppercase tracking-normal text-slate-500">Account</h2>
+        <Button variant="secondary" onClick={logout}>
+          <LogOut size={16} /> Sign out
+        </Button>
       </section>
     </div>
   )

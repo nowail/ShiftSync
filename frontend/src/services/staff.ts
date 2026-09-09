@@ -31,10 +31,19 @@ export interface CreateStaffInput {
   desiredWeeklyHours: number
 }
 
+// POST /staff generates a real login (firstname.lastname@coastaleats.com, the standard
+// demo password — see backend/src/routes/staff.ts) and includes the email in its response
+// specifically so the admin who just created the account has something to hand the new
+// hire; StaffMember itself has no email field (staff never see each other's), hence the
+// wider return type here instead of just StaffMember.
+export interface CreatedStaffMember extends StaffMember {
+  email: string
+}
+
 // actor is unused now — the backend derives the actor from the JWT and requires admin
 // role for both of these. Kept in the signature so call sites don't need to change.
-export async function createStaffMember(input: CreateStaffInput, _actor: { id: string; name: string }): Promise<StaffMember> {
-  return apiRequest<StaffMember>('/staff', { method: 'POST', body: input })
+export async function createStaffMember(input: CreateStaffInput, _actor: { id: string; name: string }): Promise<CreatedStaffMember> {
+  return apiRequest<CreatedStaffMember>('/staff', { method: 'POST', body: input })
 }
 
 export async function updateStaffMember(

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
+import { Copy, Check, Plus } from 'lucide-react'
 import { getLocations, createLocation } from '../../services/locations'
-import { getStaffPage, createStaffMember, skillOptions } from '../../services/staff'
-import { useSessionStore } from '../../store/session'
+import { getStaffPage, createStaffMember, skillOptions, type CreatedStaffMember } from '../../services/staff'
+import { useSessionStore, DEMO_LOGIN_PASSWORD } from '../../store/session'
 import { useUiStore } from '../../store/ui'
 import { Tabs } from '../../components/ui/Tabs'
 import { Table } from '../../components/ui/Table'
@@ -25,6 +25,7 @@ export function LocationsUsers() {
   const [addLocationOpen, setAddLocationOpen] = useState(false)
   const [addStaffOpen, setAddStaffOpen] = useState(false)
   const [staffPage, setStaffPage] = useState(1)
+  const [createdStaff, setCreatedStaff] = useState<CreatedStaffMember | null>(null)
 
   const staffId = useSessionStore((s) => s.staffId)!
   const staffName = useSessionStore((s) => s.staffName)!
@@ -58,12 +59,23 @@ export function LocationsUsers() {
       certifications: StaffCertification[]
       desiredWeeklyHours: number
     }) => createStaffMember(input, actor),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['staff'] })
-      pushToast({ title: 'Staff member added', tone: 'success' })
       setAddStaffOpen(false)
+      // The generated login (email + the standard demo password) only ever appears in
+      // this one response — surface it now rather than leaving the admin to dig it out of
+      // the audit log's details text.
+      setCreatedStaff(created)
     },
   })
+
+  const [copiedField, setCopiedField] = useState<'email' | 'password' | null>(null)
+  function copyToClipboard(field: 'email' | 'password', value: string) {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopiedField(field)
+      setTimeout(() => setCopiedField((f) => (f === field ? null : f)), 1500)
+    })
+  }
 
   return (
     <div className="flex flex-col gap-5 px-6">
@@ -243,6 +255,67 @@ export function LocationsUsers() {
             {createStaffMutation.isPending ? 'Adding…' : 'Add staff member'}
           </Button>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!createdStaff}
+        onClose={() => setCreatedStaff(null)}
+        title="Staff account created"
+        size="sm"
+      >
+        {createdStaff && (
+          <div className="flex flex-col gap-4">
+            <p className="text-body-sm text-slate-600">
+              Share these login details with <strong className="font-medium text-ink">{createdStaff.name}</strong> —
+              this is the only time they're shown.
+            </p>
+
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="mb-1 text-body-xs font-medium text-slate-600">Email</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded-sm border border-slate-200 bg-slate-100/50 px-3 py-2 text-body-sm text-ink">
+                    {createdStaff.email}
+                  </code>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => copyToClipboard('email', createdStaff.email)}
+                    aria-label="Copy email"
+                  >
+                    {copiedField === 'email' ? <Check size={14} /> : <Copy size={14} />}
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-1 text-body-xs font-medium text-slate-600">Password</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded-sm border border-slate-200 bg-slate-100/50 px-3 py-2 text-body-sm text-ink">
+                    {DEMO_LOGIN_PASSWORD}
+                  </code>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => copyToClipboard('password', DEMO_LOGIN_PASSWORD)}
+                    aria-label="Copy password"
+                  >
+                    {copiedField === 'password' ? <Check size={14} /> : <Copy size={14} />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-body-xs text-slate-500">
+              Every account uses this same demo password — there's no way to set a custom one or reset it later in
+              this build. The new hire can sign in with it directly.
+            </p>
+
+            <Button variant="primary" onClick={() => setCreatedStaff(null)}>
+              Done
+            </Button>
+          </div>
+        )}
       </Modal>
     </div>
   )
