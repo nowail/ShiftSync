@@ -5,9 +5,8 @@ take-home assessment: a fully-designed React frontend (originally mock-data-driv
 a real Node/Express/Postgres (Neon) API built out phase-by-phase, with a documented constraint
 engine, real-time updates, and analytics.
 
-- **Frontend build plan:** `FRONTEND_PROMPT.md`, design decisions in `frontend/README.md`
-- **Backend build plan:** `BACKEND_PROMPT.md` (phase-by-phase; each phase has its own commit —
-  see `git log --oneline`)
+- Frontend design decisions: `frontend/README.md`
+- Backend built phase-by-phase — each phase has its own commit, see `git log --oneline`
 
 ## Deployed URLs
 
