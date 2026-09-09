@@ -1,6 +1,6 @@
 import { apiRequest, ApiClientError, fetchAllPages } from '../lib/apiClient'
 import { getAuditLog } from './audit'
-import type { EligibleCandidate, Paginated, Shift, SkillTag, Violation } from '../types'
+import type { EligibleCandidate, Paginated, Shift, ShiftStatus, SkillTag, Violation } from '../types'
 
 export async function getShiftsForWeek(locationId: string, weekStart: string): Promise<Shift[]> {
   return apiRequest<Shift[]>(`/shifts?locationId=${encodeURIComponent(locationId)}&weekStart=${weekStart}`)
@@ -80,14 +80,17 @@ export async function unassignShift(shiftId: string, _actor: { id: string; name:
   return apiRequest<Shift>(`/shifts/${shiftId}/unassign`, { method: 'POST' })
 }
 
+// The Create Shift form (ScheduleBoard.tsx / CreateShiftModal.tsx) is the only caller.
+// `status` lets a manager creating a shift on an already-published week choose between a
+// live addition and a draft one — see the form for that explicit choice, and POST /shifts
+// for why it defaults to 'draft' server-side when omitted.
 export async function createOpenShift(input: {
   locationId: string
-  weekStart: string
-  date: string
   startUtc: string
   endUtc: string
   role: SkillTag
-  isPremium?: boolean
+  headcount: number
+  status?: ShiftStatus
 }): Promise<Shift> {
   return apiRequest<Shift>('/shifts', {
     method: 'POST',
@@ -96,7 +99,8 @@ export async function createOpenShift(input: {
       startsAt: input.startUtc,
       endsAt: input.endUtc,
       skillRequired: input.role,
-      isPremium: input.isPremium,
+      headcount: input.headcount,
+      status: input.status,
     },
   })
 }

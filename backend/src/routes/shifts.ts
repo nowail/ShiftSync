@@ -412,6 +412,11 @@ const createShiftSchema = z.object({
   endsAt: z.string(),
   skillRequired: z.string(),
   headcount: z.number().int().min(1).default(1),
+  // A manager creating a shift on an already-published week chooses explicitly whether
+  // it goes live immediately or starts in draft (surfaced as two distinct buttons on the
+  // frontend's Create Shift form) — defaults to 'draft' for the common case (an unpublished
+  // week), matching this endpoint's original behavior before that choice existed.
+  status: z.enum(['draft', 'published']).default('draft'),
 })
 
 shiftsRouter.post('/shifts', requireAuth, requireRole('manager', 'admin'), async (req, res) => {
@@ -423,6 +428,10 @@ shiftsRouter.post('/shifts', requireAuth, requireRole('manager', 'admin'), async
     prisma.location.findUniqueOrThrow({ where: { id: body.locationId } }),
   ])
   const startsAt = new Date(body.startsAt)
+  // Not enforced as a block — publishing directly inside the cutoff is a deliberate manager
+  // choice the frontend already asked about explicitly. This only shapes the audit trail
+  // wording, matching how PATCH /shifts/:id calls out the same situation for edits.
+  const publishedInsideCutoff = body.status === 'published' && isWithinPublishCutoff(startsAt)
 
   const shift = await prisma.$transaction(async (tx) => {
     const created = await tx.shift.create({
@@ -437,7 +446,7 @@ shiftsRouter.post('/shifts', requireAuth, requireRole('manager', 'admin'), async
         // actually derives it from; this keeps the stored column in sync for anyone
         // querying the table directly, not because any read path trusts it.
         isPremium: isPremiumShift(startsAt, createLocation.timezone),
-        status: 'draft',
+        status: body.status,
       },
     })
     await writeAudit(tx, {
@@ -446,7 +455,11 @@ shiftsRouter.post('/shifts', requireAuth, requireRole('manager', 'admin'), async
       entityId: created.id,
       locationId: body.locationId,
       action: 'created_shift',
-      details: `Created a ${body.skillRequired} shift.`,
+      details: publishedInsideCutoff
+        ? `Created a ${body.skillRequired} shift and published it immediately, inside the 48-hour publish cutoff.`
+        : body.status === 'published'
+          ? `Created a ${body.skillRequired} shift and published it immediately.`
+          : `Created a ${body.skillRequired} shift.`,
       after: created,
     })
     return created

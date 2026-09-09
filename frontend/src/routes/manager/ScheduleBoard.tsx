@@ -15,6 +15,7 @@ import { isWithinPublishCutoff } from '../../lib/rules'
 import { roleLabel } from '../../lib/format'
 import { BoardCell } from '../../components/manager/BoardCell'
 import { AssignPanel } from '../../components/manager/AssignPanel'
+import { CreateShiftModal } from '../../components/manager/CreateShiftModal'
 import { Tabs } from '../../components/ui/Tabs'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -42,6 +43,7 @@ export function ScheduleBoard() {
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeSeat, setActiveSeat] = useState<Shift | null>(null)
   const [justPublished, setJustPublished] = useState(false)
+  const [createShiftOpen, setCreateShiftOpen] = useState(false)
 
   const queryClient = useQueryClient()
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
@@ -125,6 +127,9 @@ export function ScheduleBoard() {
               <Lock size={12} /> inside 48h cutoff
             </span>
           )}
+          <Button variant="secondary" onClick={() => setCreateShiftOpen(true)} disabled={!location}>
+            <Plus size={16} /> Create shift
+          </Button>
           <div className="relative">
             {status === 'published' ? (
               <Button variant="secondary" onClick={() => unpublishMutation.mutate()} disabled={unpublishMutation.isPending}>
@@ -254,6 +259,22 @@ export function ScheduleBoard() {
 
       {activeSeat && location && (
         <AssignPanel shift={activeSeat} location={location} onClose={() => setActiveSeat(null)} />
+      )}
+
+      {createShiftOpen && location && (
+        <CreateShiftModal
+          location={location}
+          weekDays={weekDays}
+          defaultDate={weekDays[selectedDay]}
+          weekIsPublished={status === 'published'}
+          onClose={() => setCreateShiftOpen(false)}
+          onCreated={(_shift, createdStatus) =>
+            pushToast({
+              title: createdStatus === 'published' ? 'Shift created and published' : 'Shift created as draft',
+              tone: 'success',
+            })
+          }
+        />
       )}
     </div>
   )

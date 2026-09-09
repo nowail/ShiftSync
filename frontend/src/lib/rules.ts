@@ -9,7 +9,7 @@ const WEEKLY_REFERENCE_HOURS = 40
 const CONSECUTIVE_DAY_WARNING = 6 // soft
 const CONSECUTIVE_DAY_HARD = 7 // hard, overridable
 
-const PUBLISH_CUTOFF_HOURS = 48
+export const PUBLISH_CUTOFF_HOURS = 48
 
 export function isWithinPublishCutoff(shift: Shift, now: Date = new Date()): boolean {
   const msUntilStart = new Date(shift.startUtc).getTime() - now.getTime()
