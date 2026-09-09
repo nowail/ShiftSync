@@ -9,10 +9,11 @@ in the project root — this README covers what exists so far (**Phase 1: founda
   `datasource.url` from `schema.prisma` in favor of a `prisma.config.ts` + driver-adapter
   pattern, which breaks the classic "`DATABASE_URL` from `.env`" setup this project (and
   `BACKEND_PROMPT.md`) assumes. 6.19.3 is the last stable line with the classic pattern.
-- **Local dev runs against a plain Postgres 16 container, not Neon** — this sandbox has no
-  Neon account credentials. Swapping to real Neon is a one-line change: set `DATABASE_URL`
-  in `.env` to the Neon connection string (`sslmode=require`) and re-run migrations. Neon is
-  vanilla Postgres, so nothing else changes, including the exclusion-constraint migration.
+- **The database is Neon** (`DATABASE_URL` in `.env`, `sslmode=require`) — both migrations,
+  the seed script, and the exclusion constraint have been verified directly against Neon
+  (not just local Postgres). A local Postgres 16 container is also supported for anyone
+  without Neon access: it's plain vanilla Postgres, so nothing else about the setup changes,
+  including the exclusion-constraint migration — just point `DATABASE_URL` at it instead.
 - Two **known, low-risk `npm audit` findings**, both transitive dependencies of the `prisma`
   CLI package itself (not `@prisma/client`, not anything this app's runtime code touches):
   `mysql2` (via Prisma's bundled MySQL driver support, which we never invoke — this project
