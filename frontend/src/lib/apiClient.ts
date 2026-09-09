@@ -62,3 +62,42 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
+
+/** Same request/auth/error handling as apiRequest, for the one endpoint (CSV export)
+ *  that returns a non-JSON body — apiRequest's unconditional `response.json()` would
+ *  throw trying to parse a CSV file as JSON. */
+export async function apiRequestText(path: string, options: ApiRequestOptions = {}): Promise<string> {
+  const { body, skipAuth, headers, ...rest } = options
+
+  const finalHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(headers as Record<string, string> | undefined),
+  }
+  if (!skipAuth) {
+    const token = useSessionStore.getState().token
+    if (token) finalHeaders.Authorization = `Bearer ${token}`
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...rest,
+    headers: finalHeaders,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    let parsed: { error?: { message?: string; code?: string; details?: unknown } } | null = null
+    try {
+      parsed = await response.json()
+    } catch {
+      // Non-JSON error body — fall through to the generic message below.
+    }
+    throw new ApiClientError(
+      response.status,
+      parsed?.error?.message ?? `Request failed with status ${response.status}`,
+      parsed?.error?.code,
+      parsed?.error?.details,
+    )
+  }
+
+  return response.text()
+}

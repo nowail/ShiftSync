@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { TriangleAlert } from 'lucide-react'
+import { DollarSign, TriangleAlert } from 'lucide-react'
 import {
   CartesianGrid,
   Legend,
@@ -15,10 +15,9 @@ import {
 import { getShiftsForWeek, previewAssignment } from '../../services/shifts'
 import { getStaffByLocation } from '../../services/staff'
 import { getLocations } from '../../services/locations'
+import { getOvertimeSummary } from '../../services/overtime'
 import { useSessionStore } from '../../store/session'
 import { CURRENT_WEEK_START_KEY, NEXT_WEEK_START_KEY } from '../../lib/weeks'
-import { shiftHours, weeklyHoursFor, consecutiveDaysIncluding } from '../../lib/rules'
-import { localDateKey } from '../../lib/timezone'
 import { formatHours } from '../../lib/format'
 import { Avatar } from '../../components/shared/Avatar'
 import { Badge } from '../../components/ui/Badge'
@@ -57,35 +56,33 @@ export function OvertimeDashboard() {
     queryFn: () => getStaffByLocation(activeLocationId!),
     enabled: !!activeLocationId,
   })
+  // Still needed for the what-if preview's "open shift" dropdown (unfilledShifts below) —
+  // the per-staff hours/streak/cost numbers now come from the real overtime endpoint
+  // instead of being derived from this query client-side.
   const shiftsQuery = useQuery({
     queryKey: ['shifts', activeLocationId, weekStart],
     queryFn: () => getShiftsForWeek(activeLocationId!, weekStart),
     enabled: !!activeLocationId,
   })
+  const overtimeQuery = useQuery({
+    queryKey: ['overtime', activeLocationId, weekStart],
+    queryFn: () => getOvertimeSummary(activeLocationId!, weekStart),
+    enabled: !!activeLocationId,
+  })
 
   const rows = useMemo(() => {
-    if (!staffQuery.data || !shiftsQuery.data || !location) return []
-    return staffQuery.data
-      .filter((s) => s.role === 'staff')
-      .map((staff) => {
-        const totalHours = weeklyHoursFor(staff.id, weekStart, shiftsQuery.data)
-        const dailyHours = new Map<string, number>()
-        shiftsQuery.data
-          .filter((s) => s.assignedStaffId === staff.id)
-          .forEach((s) => {
-            const key = localDateKey(s.startUtc, location.timezone)
-            dailyHours.set(key, (dailyHours.get(key) ?? 0) + shiftHours(s))
-          })
-        const maxStreak = Math.max(
-          0,
-          ...Array.from(dailyHours.keys()).map((dateKey) =>
-            consecutiveDaysIncluding(staff.id, location, shiftsQuery.data, dateKey),
-          ),
-        )
-        return { staff, totalHours, dailyHours, maxStreak }
+    if (!staffQuery.data || !overtimeQuery.data) return []
+    const staffById = new Map(staffQuery.data.map((s) => [s.id, s]))
+    return overtimeQuery.data.rows
+      .map((row) => {
+        const staff = staffById.get(row.staffId)
+        if (!staff) return null
+        const dailyHours = new Map(row.dailyHours.map((d) => [d.date, d.hours]))
+        return { staff, totalHours: row.totalHours, dailyHours, maxStreak: row.maxConsecutiveDays }
       })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
       .sort((a, b) => b.totalHours - a.totalHours)
-  }, [staffQuery.data, shiftsQuery.data, location, weekStart])
+  }, [staffQuery.data, overtimeQuery.data])
 
   // The 3-4 staff closest to or over the weekly thresholds, so the trend chart stays
   // readable instead of plotting everyone on the schedule.
@@ -115,8 +112,8 @@ export function OvertimeDashboard() {
     enabled: !!whatIfShiftId && !!whatIfStaffId,
   })
 
-  const isLoading = staffQuery.isLoading || shiftsQuery.isLoading
-  const isError = staffQuery.isError || shiftsQuery.isError
+  const isLoading = staffQuery.isLoading || shiftsQuery.isLoading || overtimeQuery.isLoading
+  const isError = staffQuery.isError || shiftsQuery.isError || overtimeQuery.isError
 
   return (
     <div className="flex flex-col gap-6 px-4 sm:px-6">
@@ -137,6 +134,19 @@ export function OvertimeDashboard() {
 
       {isLoading && <LoadingState label="Crunching hours…" />}
       {isError && <ErrorState message="Couldn't load overtime data." />}
+
+      {!isLoading && !isError && overtimeQuery.data && (
+        <div className="flex items-center gap-3 rounded-md border border-slate-200 p-4">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brick/10 text-brick">
+            <DollarSign size={18} />
+          </span>
+          <div>
+            <p className="text-body-xs text-slate-500">Projected weekly overtime cost</p>
+            <p className="font-display text-display-sm text-ink">${overtimeQuery.data.projectedWeeklyCost.toFixed(0)}</p>
+          </div>
+        </div>
+      )}
+
       {!isLoading && !isError && rows.length === 0 && (
         <EmptyState title="No one is scheduled yet" body="Assign shifts on the board to see hours here." />
       )}

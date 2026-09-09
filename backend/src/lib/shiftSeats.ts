@@ -1,6 +1,7 @@
 import { formatInTimeZone } from 'date-fns-tz'
 import type { Assignment, Shift } from '@prisma/client'
 import { prisma } from './prisma'
+import { isPremiumShift } from '../engine/timeHelpers'
 
 // The frontend's mock `Shift` type is one row per seat (a single `assignedStaffId`).
 // The real schema is headcount-based: one `Shift` row can have several concurrent
@@ -56,7 +57,12 @@ export function explodeShiftToSeats(shift: Shift, assignments: Assignment[], tim
     endUtc: shift.endsAt.toISOString(),
     role: shift.skillRequired,
     status: shift.status,
-    isPremium: shift.isPremium,
+    // Computed fresh here rather than trusted from the stored column — the Phase 6
+    // premium-shift rule (Fri/Sat starting >=5pm, location-local) per BACKEND_PROMPT.
+    // Every shift response goes through this function, so this is the one place that
+    // has to be right; the stored Shift.isPremium column is kept in sync at write time
+    // (routes/shifts.ts) as a matter of DB hygiene, not because anything here reads it.
+    isPremium: isPremiumShift(shift.startsAt, timezone),
   }
 
   const active = assignments.filter((a) => a.status === 'active')

@@ -182,28 +182,6 @@ export function summarizeWeek(locationId: string, weekStart: string, shifts: Shi
   return { unfilledSeats, totalSeats, hardViolations, softViolations, overtimeCost }
 }
 
-/**
- * Ratio-based fairness score: a staff member's share of premium shifts divided by their
- * share of total hours worked. ~1.0 means premium shifts track hours worked proportionally;
- * above 1 means they get more than their proportional share, below 1 means less.
- */
-export function computeFairnessRows(shifts: import('../types').Shift[], staffIds: string[]): import('../types').FairnessRow[] {
-  const assigned = shifts.filter((s) => s.assignedStaffId)
-  const totalHoursAll = assigned.reduce((sum, s) => sum + shiftHours(s), 0)
-
-  return staffIds.map((staffId) => {
-    const mine = assigned.filter((s) => s.assignedStaffId === staffId)
-    const totalHours = mine.reduce((sum, s) => sum + shiftHours(s), 0)
-    const totalShiftCount = mine.length
-    const premiumShiftCount = mine.filter((s) => s.isPremium).length
-    const premiumShare = totalShiftCount > 0 ? premiumShiftCount / totalShiftCount : 0
-    const hoursShare = totalHoursAll > 0 ? totalHours / totalHoursAll : 0
-    const fairnessScore = hoursShare > 0 ? premiumShare / hoursShare : premiumShare > 0 ? Infinity : 0
-
-    return { staffId, totalHours, premiumShiftCount, totalShiftCount, fairnessScore }
-  })
-}
-
 export function getEligibleCandidates(
   shift: Shift,
   allStaff: StaffMember[],

@@ -13,6 +13,8 @@ import { notificationsRouter } from './routes/notifications'
 import { auditRouter } from './routes/audit'
 import { availabilityRouter } from './routes/availability'
 import { presenceRouter } from './routes/presence'
+import { overtimeRouter } from './routes/overtime'
+import { fairnessRouter } from './routes/fairness'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 
 export function createApp() {
@@ -37,6 +39,8 @@ export function createApp() {
   app.use(auditRouter)
   app.use(availabilityRouter)
   app.use(presenceRouter)
+  app.use(overtimeRouter)
+  app.use(fairnessRouter)
 
   app.use(notFoundHandler)
   app.use(errorHandler)

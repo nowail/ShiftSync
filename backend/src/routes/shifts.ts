@@ -20,6 +20,7 @@ import { notify, type NotifyInput } from '../lib/notify'
 import { PENDING_SWAP_STAGES } from './swaps'
 import { emitToLocation } from '../lib/socket'
 import { cancelPresenceForAssignment, schedulePresenceForAssignment } from '../lib/presenceScheduler'
+import { isPremiumShift } from '../engine/timeHelpers'
 
 export const shiftsRouter = Router()
 
@@ -401,22 +402,31 @@ const createShiftSchema = z.object({
   endsAt: z.string(),
   skillRequired: z.string(),
   headcount: z.number().int().min(1).default(1),
-  isPremium: z.boolean().default(false),
 })
 
 shiftsRouter.post('/shifts', requireAuth, requireRole('manager', 'admin'), async (req, res) => {
   const body = createShiftSchema.parse(req.body)
-  await assertManagerLocationAccess(req.user!, body.locationId)
+
+  // Both only need body.locationId, not each other's result.
+  const [, createLocation] = await Promise.all([
+    assertManagerLocationAccess(req.user!, body.locationId),
+    prisma.location.findUniqueOrThrow({ where: { id: body.locationId } }),
+  ])
+  const startsAt = new Date(body.startsAt)
 
   const shift = await prisma.$transaction(async (tx) => {
     const created = await tx.shift.create({
       data: {
         locationId: body.locationId,
-        startsAt: new Date(body.startsAt),
+        startsAt,
         endsAt: new Date(body.endsAt),
         skillRequired: body.skillRequired,
         headcount: body.headcount,
-        isPremium: body.isPremium,
+        // Premium is a computed property (Fri/Sat >=5pm, location-local), never a
+        // client-settable flag — see shiftSeats.ts, which is what the wire response
+        // actually derives it from; this keeps the stored column in sync for anyone
+        // querying the table directly, not because any read path trusts it.
+        isPremium: isPremiumShift(startsAt, createLocation.timezone),
         status: 'draft',
       },
     })
@@ -432,7 +442,7 @@ shiftsRouter.post('/shifts', requireAuth, requireRole('manager', 'admin'), async
     return created
   })
 
-  const location = await prisma.location.findUniqueOrThrow({ where: { id: shift.locationId } })
+  const location = createLocation
   emitToLocation(shift.locationId, 'schedule.updated', {
     title: 'Schedule updated',
     body: `A new ${body.skillRequired} shift was added.`,
@@ -447,7 +457,6 @@ const patchShiftSchema = z.object({
   endsAt: z.string().optional(),
   skillRequired: z.string().optional(),
   headcount: z.number().int().min(1).optional(),
-  isPremium: z.boolean().optional(),
 })
 
 shiftsRouter.patch('/shifts/:id', requireAuth, requireRole('manager', 'admin'), async (req, res) => {
@@ -524,7 +533,10 @@ shiftsRouter.patch('/shifts/:id', requireAuth, requireRole('manager', 'admin'), 
         endsAt: nextEndsAt,
         skillRequired: nextSkill,
         headcount: patch.headcount ?? existing.headcount,
-        isPremium: patch.isPremium ?? existing.isPremium,
+        // Recomputed, not carried over from `existing` — an edit that moves a shift's
+        // time can change whether it's premium (see shiftSeats.ts for the actual rule
+        // and why this write is just DB hygiene, not the source of truth).
+        isPremium: isPremiumShift(nextStartsAt, location.timezone),
       },
     })
     // Assignment.rangeStart/rangeEnd are a denormalized copy of the shift's time range

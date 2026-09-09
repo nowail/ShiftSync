@@ -4,9 +4,7 @@ import { ArrowDown, ArrowUp, Scale, TrendingDown, TrendingUp } from 'lucide-reac
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { getLocations } from '../../services/locations'
 import { getStaff } from '../../services/staff'
-import { getShiftsForWeekAllLocations } from '../../services/shifts'
-import { computeFairnessRows } from '../../lib/rules'
-import { computeLocationFairness } from '../../lib/adminStats'
+import { getFairnessRows, getLocationFairnessRows } from '../../services/fairness'
 import { CURRENT_WEEK_START_KEY } from '../../lib/weeks'
 import { formatHours } from '../../lib/format'
 import { LoadingState, ErrorState, EmptyState } from '../../components/shared/States'
@@ -46,28 +44,27 @@ export function FairnessReport() {
 
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
   const staffQuery = useQuery({ queryKey: ['staff'], queryFn: getStaff })
-  const shiftsQuery = useQuery({
-    queryKey: ['shifts', 'week', CURRENT_WEEK_START_KEY, 'all'],
-    queryFn: () => getShiftsForWeekAllLocations(CURRENT_WEEK_START_KEY),
+  const fairnessQuery = useQuery({
+    queryKey: ['fairness', CURRENT_WEEK_START_KEY, locationFilter],
+    queryFn: () => getFairnessRows(CURRENT_WEEK_START_KEY, locationFilter === 'all' ? undefined : locationFilter),
+  })
+  // The KPI strip's Lowest/Highest/Company average — always company-wide, regardless of
+  // the table's location tab, matching the frontend's prior computeLocationFairness call
+  // (which always used the unfiltered, all-locations shift set too).
+  const locationFairnessQuery = useQuery({
+    queryKey: ['fairness', 'locations', CURRENT_WEEK_START_KEY],
+    queryFn: () => getLocationFairnessRows(CURRENT_WEEK_START_KEY),
   })
 
-  const isLoading = locationsQuery.isLoading || staffQuery.isLoading || shiftsQuery.isLoading
-  const isError = locationsQuery.isError || staffQuery.isError || shiftsQuery.isError
+  const isLoading = locationsQuery.isLoading || staffQuery.isLoading || fairnessQuery.isLoading || locationFairnessQuery.isLoading
+  const isError = locationsQuery.isError || staffQuery.isError || fairnessQuery.isError || locationFairnessQuery.isError
 
   const rows = useMemo(() => {
-    if (!staffQuery.data || !shiftsQuery.data) return []
+    if (!staffQuery.data || !fairnessQuery.data) return []
     const relevantStaff = staffQuery.data.filter((s) => s.role === 'staff')
-    const shifts =
-      locationFilter === 'all'
-        ? shiftsQuery.data
-        : shiftsQuery.data.filter((s) => s.locationId === locationFilter)
-    const fairness = computeFairnessRows(
-      shifts,
-      relevantStaff.map((s) => s.id),
-    )
-    const merged = fairness
+    const merged = fairnessQuery.data
       .map((row) => ({ row, staff: relevantStaff.find((s) => s.id === row.staffId)! }))
-      .filter((r) => r.row.totalShiftCount > 0)
+      .filter((r) => r.staff && r.row.totalShiftCount > 0)
 
     merged.sort((a, b) => {
       const av = a.row[sortKey]
@@ -76,7 +73,7 @@ export function FairnessReport() {
       return sortDir === 'asc' ? diff : -diff
     })
     return merged
-  }, [staffQuery.data, shiftsQuery.data, locationFilter, sortKey, sortDir])
+  }, [staffQuery.data, fairnessQuery.data, sortKey, sortDir])
 
   // Both bars are shares of the same company-wide pool (hours pool, premium-shift pool) so
   // they land on a comparable scale — unlike the table's fairnessScore, which divides a
@@ -117,9 +114,15 @@ export function FairnessReport() {
   }, [rows])
 
   const locationFairness = useMemo(() => {
-    if (!locationsQuery.data || !shiftsQuery.data) return []
-    return computeLocationFairness(shiftsQuery.data, locationsQuery.data)
-  }, [locationsQuery.data, shiftsQuery.data])
+    if (!locationsQuery.data || !locationFairnessQuery.data) return []
+    const locationById = new Map(locationsQuery.data.map((l) => [l.id, l]))
+    return locationFairnessQuery.data
+      .map((row) => {
+        const location = locationById.get(row.locationId)
+        return location ? { ...row, location } : null
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+  }, [locationsQuery.data, locationFairnessQuery.data])
 
   const finiteFairness = locationFairness.filter((l) => Number.isFinite(l.score))
   const lowest = finiteFairness.length ? finiteFairness.reduce((a, b) => (a.score <= b.score ? a : b)) : null

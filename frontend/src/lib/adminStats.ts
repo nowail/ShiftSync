@@ -2,38 +2,7 @@
 // nothing here changes what the services return, it just aggregates it differently
 // than the per-staff fairness table and per-location week summary already do.
 import { format, startOfWeek } from 'date-fns'
-import { shiftHours } from './rules'
-import type { AuditEntry, Location, Shift } from '../types'
-
-export interface LocationFairness {
-  location: Location
-  totalHours: number
-  premiumCount: number
-  hoursShare: number
-  premiumShare: number
-  score: number
-}
-
-/**
- * Location-level analogue of the per-staff fairness score: a location's share of the
- * company's premium shifts divided by its share of the company's total hours worked.
- * ~1.0 means premium shifts track hours worked proportionally for that location.
- */
-export function computeLocationFairness(shifts: Shift[], locations: Location[]): LocationFairness[] {
-  const assigned = shifts.filter((s) => s.assignedStaffId)
-  const totalHoursAll = assigned.reduce((sum, s) => sum + shiftHours(s), 0)
-  const totalPremiumAll = assigned.filter((s) => s.isPremium).length
-
-  return locations.map((location) => {
-    const mine = assigned.filter((s) => s.locationId === location.id)
-    const totalHours = mine.reduce((sum, s) => sum + shiftHours(s), 0)
-    const premiumCount = mine.filter((s) => s.isPremium).length
-    const hoursShare = totalHoursAll > 0 ? totalHours / totalHoursAll : 0
-    const premiumShare = totalPremiumAll > 0 ? premiumCount / totalPremiumAll : 0
-    const score = hoursShare > 0 ? premiumShare / hoursShare : premiumShare > 0 ? Infinity : 0
-    return { location, totalHours, premiumCount, hoursShare, premiumShare, score }
-  })
-}
+import type { AuditEntry, Location } from '../types'
 
 export interface AuditWeekStats {
   totalThisWeek: number

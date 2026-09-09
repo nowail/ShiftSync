@@ -1,12 +1,14 @@
-import { addDays, format, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import type { EngineViolation, EvaluateAssignmentInput } from './types'
-import { hoursBetween, localDateKey, localDayOfWeek, localTimeOfDay, rangesOverlap } from './timeHelpers'
+import { consecutiveDayStreak, hoursBetween, localDateKey, localDayOfWeek, localTimeOfDay, rangesOverlap } from './timeHelpers'
 import { roleLabel } from './labels'
 
 const DAILY_WARNING_HOURS = 8
 const DAILY_HARD_LIMIT_HOURS = 12
-const WEEKLY_WARNING_HOURS = 35
-const WEEKLY_REFERENCE_HOURS = 40
+// Exported: Phase 6's overtime dashboard reuses these exact thresholds for its
+// retrospective weekly summary instead of hardcoding 35/40 again.
+export const WEEKLY_WARNING_HOURS = 35
+export const WEEKLY_REFERENCE_HOURS = 40
 const CONSECUTIVE_DAY_WARNING = 6
 const CONSECUTIVE_DAY_HARD = 7
 const REST_GAP_HOURS = 10
@@ -189,12 +191,7 @@ export function checkConsecutiveDays(input: EvaluateAssignmentInput): EngineViol
   const workedDayKeys = new Set(existingBookings.map((b) => localDateKey(b.startsAt, location.timezone)))
   workedDayKeys.add(dateKey)
 
-  let streak = 0
-  let cursor = parseISO(dateKey)
-  while (workedDayKeys.has(format(cursor, 'yyyy-MM-dd'))) {
-    streak++
-    cursor = addDays(cursor, -1)
-  }
+  const streak = consecutiveDayStreak(workedDayKeys, dateKey)
 
   if (streak >= CONSECUTIVE_DAY_HARD) {
     return {
