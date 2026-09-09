@@ -41,11 +41,13 @@ export interface Shift {
 }
 
 export type ViolationType =
-  | 'daily_overtime' // > 12h in a day — hard, not overridable
+  | 'daily_overtime' // warns >8h, blocks >12h in a day — hard block only above 12h
   | 'double_booking' // overlapping shifts — hard, not overridable
   | 'not_certified' // missing skill/location certification — hard, not overridable
   | 'weekly_overtime' // approaching/over 40h in a week — soft
   | 'consecutive_days' // 6th day is a soft warning; 7th+ is hard but overridable
+  | 'rest_gap' // fewer than 10h between shifts — hard, not overridable (backend Phase 3)
+  | 'not_available' // outside staff's declared availability window — hard, not overridable (backend Phase 3)
 
 export interface Violation {
   type: ViolationType
