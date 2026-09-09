@@ -17,6 +17,7 @@ import { BoardCell } from '../../components/manager/BoardCell'
 import { AssignPanel } from '../../components/manager/AssignPanel'
 import { CreateShiftModal } from '../../components/manager/CreateShiftModal'
 import { EditShiftModal } from '../../components/manager/EditShiftModal'
+import { DeleteShiftConfirm } from '../../components/manager/DeleteShiftConfirm'
 import { Tabs } from '../../components/ui/Tabs'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -46,6 +47,7 @@ export function ScheduleBoard() {
   const [justPublished, setJustPublished] = useState(false)
   const [createShiftOpen, setCreateShiftOpen] = useState(false)
   const [editingSeat, setEditingSeat] = useState<Shift | null>(null)
+  const [deletingSeat, setDeletingSeat] = useState<Shift | null>(null)
 
   const queryClient = useQueryClient()
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
@@ -212,6 +214,7 @@ export function ScheduleBoard() {
                       flashedShiftId={flashedShiftId}
                       onSelectSeat={setActiveSeat}
                       onEditSeat={setEditingSeat}
+                      onDeleteSeat={setDeletingSeat}
                     />
                   </div>
                 )
@@ -252,6 +255,7 @@ export function ScheduleBoard() {
                         flashedShiftId={flashedShiftId}
                         onSelectSeat={setActiveSeat}
                         onEditSeat={setEditingSeat}
+                        onDeleteSeat={setDeletingSeat}
                       />
                     </div>
                   ))}
@@ -297,6 +301,15 @@ export function ScheduleBoard() {
               tone: 'success',
             })
           }
+        />
+      )}
+
+      {deletingSeat && location && (
+        <DeleteShiftConfirm
+          shift={deletingSeat}
+          location={location}
+          onClose={() => setDeletingSeat(null)}
+          onDeleted={() => pushToast({ title: 'Shift deleted', tone: 'info' })}
         />
       )}
 

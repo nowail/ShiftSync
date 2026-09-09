@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Lock, Pencil, Plus, ShieldAlert, Star } from 'lucide-react'
+import { Lock, Pencil, Plus, ShieldAlert, Star, Trash2 } from 'lucide-react'
 import { Avatar } from '../shared/Avatar'
 import { isWithinPublishCutoff } from '../../lib/rules'
 import type { Shift, StaffMember } from '../../types'
@@ -10,12 +10,14 @@ export function BoardCell({
   flashedShiftId,
   onSelectSeat,
   onEditSeat,
+  onDeleteSeat,
 }: {
   seats: Shift[]
   staffById: Map<string, StaffMember>
   flashedShiftId: string | null
   onSelectSeat: (shift: Shift) => void
   onEditSeat: (shift: Shift) => void
+  onDeleteSeat: (shift: Shift) => void
 }) {
   if (seats.length === 0) {
     return <div className="min-h-[64px] rounded-sm border border-dashed border-slate-200" />
@@ -79,6 +81,19 @@ export function BoardCell({
             >
               <Pencil size={12} />
             </button>
+            {/* Deleting a filled seat would remove the shift out from under whoever's
+                assigned to it — unassign first, then delete, matching the backend's own
+                framing of "unassign and leave it as an empty draft instead." */}
+            {!staff && (
+              <button
+                onClick={() => onDeleteSeat(shift)}
+                aria-label="Delete shift"
+                title="Delete shift"
+                className="flex shrink-0 items-center justify-center rounded-sm border border-slate-200 px-1.5 text-slate-500 hover:border-brick hover:text-brick"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
           </div>
         )
       })}

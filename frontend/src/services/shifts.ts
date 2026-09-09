@@ -114,6 +114,24 @@ export async function updateShift(
   }
 }
 
+export type DeleteShiftResult = { ok: true } | { ok: false; message: string }
+
+// The Delete Shift UI only offers this on unfilled seats, but the backend's FK guard
+// (assignment/swap history, even past/cancelled) can still reject it — a normal, structured
+// outcome (409) surfaced with the guard's own message, not a raw thrown error, matching
+// updateShift's pattern above.
+export async function deleteShift(shiftIdOrSeatId: string): Promise<DeleteShiftResult> {
+  try {
+    await apiRequest<void>(`/shifts/${shiftIdOrSeatId}`, { method: 'DELETE' })
+    return { ok: true }
+  } catch (err) {
+    if (err instanceof ApiClientError && err.status === 409) {
+      return { ok: false, message: err.message }
+    }
+    throw err
+  }
+}
+
 // The Create Shift form (ScheduleBoard.tsx / CreateShiftModal.tsx) is the only caller.
 // `status` lets a manager creating a shift on an already-published week choose between a
 // live addition and a draft one — see the form for that explicit choice, and POST /shifts

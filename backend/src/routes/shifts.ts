@@ -656,7 +656,11 @@ shiftsRouter.patch('/shifts/:id', requireAuth, requireRole('manager', 'admin'), 
 })
 
 shiftsRouter.delete('/shifts/:id', requireAuth, requireRole('manager', 'admin'), async (req, res) => {
-  const shiftId = String(req.params.id)
+  // Same id-shape ambiguity PATCH /shifts/:id resolves — the Delete Shift UI only offers
+  // this action on unfilled seats, whose id is always the synthetic
+  // `${shiftId}:unfilled:N` form, never a bare shift id.
+  const shiftId = await resolveShiftIdFromSeatOrShiftId(String(req.params.id))
+  if (!shiftId) throw new ApiError(404, 'not_found', 'Shift not found')
   const existing = await prisma.shift.findUnique({ where: { id: shiftId } })
   if (!existing) throw new ApiError(404, 'not_found', 'Shift not found')
   await assertManagerLocationAccess(req.user!, existing.locationId)
