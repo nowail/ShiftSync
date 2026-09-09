@@ -1,0 +1,28 @@
+# Dependencies (backend/ and frontend/ each also carry their own, narrower .gitignore —
+# this one is a repo-wide backstop in case a new top-level project is ever added here
+# without its own).
+node_modules/
+
+# Environment files — never commit real secrets/connection strings; only .env.example
+# files (which are tracked) should exist in git.
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS/editor cruft
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Claude Code local session/tool state — not project source.
+.claude/
