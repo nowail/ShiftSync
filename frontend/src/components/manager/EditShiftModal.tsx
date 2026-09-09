@@ -1,44 +1,40 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { formatInTimeZone } from 'date-fns-tz'
 import { TriangleAlert } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
-import { createOpenShift } from '../../services/shifts'
+import { updateShift } from '../../services/shifts'
 import { skillOptions } from '../../services/staff'
 import { roleLabel } from '../../lib/format'
 import { resolveShiftWallTimes } from '../../lib/timezone'
-import { PUBLISH_CUTOFF_HOURS } from '../../lib/rules'
-import type { Location, Shift, ShiftStatus, SkillTag } from '../../types'
+import type { Location, Shift, SkillTag } from '../../types'
 
-function isStartWithinCutoff(startUtc: string): boolean {
-  const msUntilStart = new Date(startUtc).getTime() - Date.now()
-  return msUntilStart >= 0 && msUntilStart < PUBLISH_CUTOFF_HOURS * 3600 * 1000
-}
-
-export function CreateShiftModal({
+export function EditShiftModal({
+  shift,
   location,
   weekDays,
-  defaultDate,
-  weekIsPublished,
+  headcount: initialHeadcount,
   onClose,
-  onCreated,
+  onSaved,
 }: {
+  shift: Shift
   location: Location
   weekDays: string[]
-  defaultDate: string
-  weekIsPublished: boolean
+  headcount: number
   onClose: () => void
-  onCreated: (shift: Shift, status: ShiftStatus) => void
+  onSaved: (cancelledSwapCount: number) => void
 }) {
   const queryClient = useQueryClient()
-  const [date, setDate] = useState(defaultDate)
-  const [startTime, setStartTime] = useState('09:00')
-  const [endTime, setEndTime] = useState('17:00')
-  const [role, setRole] = useState<SkillTag>(skillOptions()[0])
-  const [headcount, setHeadcount] = useState(1)
+  const [date, setDate] = useState(shift.date)
+  const [startTime, setStartTime] = useState(() => formatInTimeZone(new Date(shift.startUtc), location.timezone, 'HH:mm'))
+  const [endTime, setEndTime] = useState(() => formatInTimeZone(new Date(shift.endUtc), location.timezone, 'HH:mm'))
+  const [role, setRole] = useState<SkillTag>(shift.role)
+  const [headcount, setHeadcount] = useState(initialHeadcount)
   const [formError, setFormError] = useState<string | null>(null)
+  const [swapConflict, setSwapConflict] = useState<string[] | null>(null)
 
   const overnight = resolveShiftWallTimes(date, startTime, endTime, location.timezone).overnight
 
@@ -52,42 +48,42 @@ export function CreateShiftModal({
     return null
   }
 
-  const createMutation = useMutation({
-    mutationFn: (status: ShiftStatus) => {
+  const saveMutation = useMutation({
+    mutationFn: () => {
       const { startUtc, endUtc } = resolveShiftWallTimes(date, startTime, endTime, location.timezone)
-      return createOpenShift({ locationId: location.id, startUtc, endUtc, role, headcount, status }).then(
-        (shift) => ({ shift, status }),
-      )
+      return updateShift(shift.id, { startUtc, endUtc, role, headcount }, { id: '', name: '' })
     },
-    onSuccess: ({ shift, status }) => {
-      queryClient.invalidateQueries({ queryKey: ['shifts'] })
-      onCreated(shift, status)
-      onClose()
+    onSuccess: (result) => {
+      if (result.ok) {
+        queryClient.invalidateQueries({ queryKey: ['shifts'] })
+        onSaved(result.cancelledSwapCount)
+        onClose()
+      } else {
+        setSwapConflict(result.violations.map((v) => v.message))
+      }
     },
     onError: (err) => {
-      setFormError(err instanceof Error ? err.message : 'Could not create the shift.')
+      setFormError(err instanceof Error ? err.message : 'Could not save this shift.')
     },
   })
 
-  function handleSubmit(status: ShiftStatus) {
+  function handleSubmit() {
     const validationError = validate()
     if (validationError) {
       setFormError(validationError)
       return
     }
     setFormError(null)
-    createMutation.mutate(status)
+    setSwapConflict(null)
+    saveMutation.mutate()
   }
 
-  const cutoffFlag =
-    weekIsPublished && date && startTime && weekDays.includes(date) && startTime !== endTime
-      ? isStartWithinCutoff(resolveShiftWallTimes(date, startTime, endTime, location.timezone).startUtc)
-      : false
-
   return (
-    <Modal open onClose={onClose} title="Create shift" size="sm">
+    <Modal open onClose={onClose} title="Edit shift" size="sm">
       <div className="flex flex-col gap-4">
-        <p className="text-body-sm text-slate-600">{location.name}</p>
+        <p className="text-body-sm text-slate-600">
+          {location.name} · {roleLabel(shift.role)}
+        </p>
 
         <Input
           label="Date"
@@ -120,31 +116,29 @@ export function CreateShiftModal({
           onChange={(e) => setHeadcount(Number(e.target.value))}
         />
 
-        {cutoffFlag && (
-          <p className="flex items-start gap-2 rounded-sm border border-amber/30 bg-amber/10 p-2.5 text-body-xs text-amber-dark">
-            <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-            This shift starts within 48 hours. Publishing it immediately will flag it as inside the publish cutoff,
-            same as any other near-cutoff change.
-          </p>
+        {swapConflict && (
+          <div className="flex flex-col gap-1.5 rounded-sm border border-brick/30 bg-brick/5 p-2.5 text-body-xs text-brick">
+            <p className="flex items-start gap-2 font-medium">
+              <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+              This edit conflicts with an approved swap already on this shift:
+            </p>
+            <ul className="ml-6 list-disc">
+              {swapConflict.map((message, i) => (
+                <li key={i}>{message}</li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {formError && <p className="text-body-sm text-brick">{formError}</p>}
 
         <div className="flex justify-end gap-2">
-          {weekIsPublished ? (
-            <>
-              <Button variant="secondary" onClick={() => handleSubmit('draft')} disabled={createMutation.isPending}>
-                Save as draft
-              </Button>
-              <Button variant="primary" onClick={() => handleSubmit('published')} disabled={createMutation.isPending}>
-                {createMutation.isPending ? 'Publishing…' : 'Publish immediately'}
-              </Button>
-            </>
-          ) : (
-            <Button variant="primary" onClick={() => handleSubmit('draft')} disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Creating…' : 'Create shift'}
-            </Button>
-          )}
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleSubmit} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
         </div>
       </div>
     </Modal>

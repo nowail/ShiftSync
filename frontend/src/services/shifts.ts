@@ -80,6 +80,40 @@ export async function unassignShift(shiftId: string, _actor: { id: string; name:
   return apiRequest<Shift>(`/shifts/${shiftId}/unassign`, { method: 'POST' })
 }
 
+export type UpdateShiftResult =
+  | { ok: true; shifts: Shift[]; cancelledSwapCount: number }
+  | { ok: false; violations: Violation[] }
+
+// Accepts any of the three id shapes a seat can carry (filled-seat assignment id,
+// synthetic `${shiftId}:unfilled:N` id, or a bare shift id) — PATCH /shifts/:id resolves
+// it server-side the same way the candidates/preview routes already do. A 409 here is a
+// normal, structured outcome (the shift has an approved swap whose assignee no longer
+// qualifies for the edited time/skill) — the caller (EditShiftModal) branches on
+// `result.ok`, matching assignStaffToShift's 422-unpacking pattern above.
+export async function updateShift(
+  shiftIdOrSeatId: string,
+  patch: { startUtc: string; endUtc: string; role: SkillTag; headcount: number },
+  _actor: { id: string; name: string },
+): Promise<UpdateShiftResult> {
+  try {
+    const result = await apiRequest<{ shifts: Shift[]; cancelledSwapCount: number }>(`/shifts/${shiftIdOrSeatId}`, {
+      method: 'PATCH',
+      body: {
+        startsAt: patch.startUtc,
+        endsAt: patch.endUtc,
+        skillRequired: patch.role,
+        headcount: patch.headcount,
+      },
+    })
+    return { ok: true, ...result }
+  } catch (err) {
+    if (err instanceof ApiClientError && err.status === 409 && err.details && typeof err.details === 'object' && 'violations' in err.details) {
+      return { ok: false, violations: (err.details as { violations: Violation[] }).violations }
+    }
+    throw err
+  }
+}
+
 // The Create Shift form (ScheduleBoard.tsx / CreateShiftModal.tsx) is the only caller.
 // `status` lets a manager creating a shift on an already-published week choose between a
 // live addition and a draft one — see the form for that explicit choice, and POST /shifts

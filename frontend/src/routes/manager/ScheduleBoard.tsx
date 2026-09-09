@@ -16,6 +16,7 @@ import { roleLabel } from '../../lib/format'
 import { BoardCell } from '../../components/manager/BoardCell'
 import { AssignPanel } from '../../components/manager/AssignPanel'
 import { CreateShiftModal } from '../../components/manager/CreateShiftModal'
+import { EditShiftModal } from '../../components/manager/EditShiftModal'
 import { Tabs } from '../../components/ui/Tabs'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -44,6 +45,7 @@ export function ScheduleBoard() {
   const [activeSeat, setActiveSeat] = useState<Shift | null>(null)
   const [justPublished, setJustPublished] = useState(false)
   const [createShiftOpen, setCreateShiftOpen] = useState(false)
+  const [editingSeat, setEditingSeat] = useState<Shift | null>(null)
 
   const queryClient = useQueryClient()
   const locationsQuery = useQuery({ queryKey: ['locations'], queryFn: getLocations })
@@ -82,6 +84,22 @@ export function ScheduleBoard() {
       const endLocal = formatInTimeZone(new Date(s.endUtc), location.timezone, 'HH:mm')
       return `${s.role}__${startLocal}__${endLocal}` === row.key
     })
+  }
+
+  // The wire Shift/seat DTO has no headcount field (seats are already exploded
+  // one-per-assignment-or-open-slot) — the same role/time/date grouping seatsFor uses
+  // already IS the headcount, so derive it the same way rather than adding a field.
+  function headcountFor(shift: Shift): number {
+    if (!shiftsQuery.data || !location) return 1
+    const startLocal = formatInTimeZone(new Date(shift.startUtc), location.timezone, 'HH:mm')
+    const endLocal = formatInTimeZone(new Date(shift.endUtc), location.timezone, 'HH:mm')
+    return shiftsQuery.data.filter(
+      (s) =>
+        s.date === shift.date &&
+        s.role === shift.role &&
+        formatInTimeZone(new Date(s.startUtc), location.timezone, 'HH:mm') === startLocal &&
+        formatInTimeZone(new Date(s.endUtc), location.timezone, 'HH:mm') === endLocal,
+    ).length
   }
 
   const status = shiftsQuery.data?.[0]?.status ?? (weekStart === CURRENT_WEEK_START_KEY ? 'published' : 'draft')
@@ -193,6 +211,7 @@ export function ScheduleBoard() {
                       staffById={staffById}
                       flashedShiftId={flashedShiftId}
                       onSelectSeat={setActiveSeat}
+                      onEditSeat={setEditingSeat}
                     />
                   </div>
                 )
@@ -232,6 +251,7 @@ export function ScheduleBoard() {
                         staffById={staffById}
                         flashedShiftId={flashedShiftId}
                         onSelectSeat={setActiveSeat}
+                        onEditSeat={setEditingSeat}
                       />
                     </div>
                   ))}
@@ -259,6 +279,25 @@ export function ScheduleBoard() {
 
       {activeSeat && location && (
         <AssignPanel shift={activeSeat} location={location} onClose={() => setActiveSeat(null)} />
+      )}
+
+      {editingSeat && location && (
+        <EditShiftModal
+          shift={editingSeat}
+          location={location}
+          weekDays={weekDays}
+          headcount={headcountFor(editingSeat)}
+          onClose={() => setEditingSeat(null)}
+          onSaved={(cancelledSwapCount) =>
+            pushToast({
+              title:
+                cancelledSwapCount > 0
+                  ? `Shift updated — ${cancelledSwapCount} pending swap request${cancelledSwapCount > 1 ? 's' : ''} cancelled`
+                  : 'Shift updated',
+              tone: 'success',
+            })
+          }
+        />
       )}
 
       {createShiftOpen && location && (

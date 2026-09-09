@@ -483,7 +483,13 @@ const patchShiftSchema = z.object({
 })
 
 shiftsRouter.patch('/shifts/:id', requireAuth, requireRole('manager', 'admin'), async (req, res) => {
-  const shiftId = String(req.params.id)
+  // The frontend's per-seat model means the id in hand is usually an Assignment id (a
+  // filled seat) or a synthetic `${shiftId}:unfilled:N` id (an open one) — same ambiguity
+  // resolveShiftIdFromSeatOrShiftId already exists to handle for the candidates/preview
+  // routes. This endpoint had no frontend caller before the Edit Shift UI, so it was never
+  // hit with anything but a bare shift id until now.
+  const shiftId = await resolveShiftIdFromSeatOrShiftId(String(req.params.id))
+  if (!shiftId) throw new ApiError(404, 'not_found', 'Shift not found')
   const patch = patchShiftSchema.parse(req.body)
   const existing = await prisma.shift.findUnique({ where: { id: shiftId } })
   if (!existing) throw new ApiError(404, 'not_found', 'Shift not found')
@@ -639,7 +645,14 @@ shiftsRouter.patch('/shifts/:id', requireAuth, requireRole('manager', 'admin'), 
     shiftId,
   })
 
-  res.json(explodeShiftToSeats(updated, assignmentsForResponse, location.timezone))
+  // cancelledSwapCount lets the Edit Shift form tell the manager a pending request was
+  // auto-cancelled as a side effect, rather than that happening invisibly — pendingSwaps
+  // is a plain array read before the transaction and every entry in it is unconditionally
+  // cancelled inside it (no partial-failure branching), so its length is exactly right.
+  res.json({
+    shifts: explodeShiftToSeats(updated, assignmentsForResponse, location.timezone),
+    cancelledSwapCount: pendingSwaps.length,
+  })
 })
 
 shiftsRouter.delete('/shifts/:id', requireAuth, requireRole('manager', 'admin'), async (req, res) => {
