@@ -1,5 +1,5 @@
 import { db, nextDbId } from '../lib/db'
-import { withMockLatency } from '../lib/delay'
+import { apiRequest } from '../lib/apiClient'
 import type { AuditEntry } from '../types'
 
 export interface AuditFilters {
@@ -12,22 +12,15 @@ export interface AuditFilters {
 }
 
 export async function getAuditLog(filters: AuditFilters = {}): Promise<AuditEntry[]> {
-  return withMockLatency(() => {
-    return db.audit
-      .filter((entry) => (filters.actorId ? entry.actorId === filters.actorId : true))
-      .filter((entry) => (filters.entity ? entry.entity === filters.entity : true))
-      .filter((entry) => (filters.locationId ? entry.locationId === filters.locationId : true))
-      .filter((entry) => (filters.from ? entry.at >= filters.from : true))
-      .filter((entry) => (filters.to ? entry.at <= filters.to : true))
-      .filter((entry) =>
-        filters.query
-          ? `${entry.actorName} ${entry.action} ${entry.entity} ${entry.details ?? ''}`
-              .toLowerCase()
-              .includes(filters.query.toLowerCase())
-          : true,
-      )
-      .sort((a, b) => (a.at < b.at ? 1 : -1))
-  })
+  const params = new URLSearchParams()
+  if (filters.actorId) params.set('actorId', filters.actorId)
+  if (filters.entity) params.set('entity', filters.entity)
+  if (filters.locationId) params.set('locationId', filters.locationId)
+  if (filters.from) params.set('from', filters.from)
+  if (filters.to) params.set('to', filters.to)
+  if (filters.query) params.set('query', filters.query)
+  const qs = params.toString()
+  return apiRequest<AuditEntry[]>(`/audit${qs ? `?${qs}` : ''}`)
 }
 
 export function pushAudit(entry: Omit<AuditEntry, 'id' | 'at'>): AuditEntry {

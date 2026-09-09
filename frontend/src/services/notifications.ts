@@ -1,41 +1,31 @@
-import { db, nextDbId } from '../lib/db'
-import { withMockLatency } from '../lib/delay'
-import { realtimeBus } from './realtime'
-import type { AppNotification } from '../types'
-
-// Persist every live event that arrives on the realtime bus into the notification list.
-realtimeBus.subscribe((event) => {
-  const notification: AppNotification = {
-    id: nextDbId('notif'),
-    kind: event.kind,
-    title: event.title,
-    body: event.body,
-    createdAt: event.at,
-    read: false,
-    locationId: event.locationId,
-  }
-  db.notifications.unshift(notification)
-})
+import { apiRequest } from '../lib/apiClient'
+import type { AppNotification, NotificationChannel } from '../types'
 
 export async function getNotifications(): Promise<AppNotification[]> {
-  return withMockLatency(() =>
-    [...db.notifications].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-  )
+  return apiRequest<AppNotification[]>('/notifications')
 }
 
 export async function getUnreadCount(): Promise<number> {
-  return withMockLatency(() => db.notifications.filter((n) => !n.read).length)
+  return apiRequest<number>('/notifications/unread-count')
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  return withMockLatency(() => {
-    const n = db.notifications.find((n) => n.id === id)
-    if (n) n.read = true
-  })
+  await apiRequest<void>(`/notifications/${id}/read`, { method: 'POST' })
 }
 
 export async function markAllNotificationsRead(): Promise<void> {
-  return withMockLatency(() => {
-    db.notifications.forEach((n) => (n.read = true))
+  await apiRequest<void>('/notifications/read-all', { method: 'POST' })
+}
+
+export async function getNotificationPreference(): Promise<NotificationChannel> {
+  const { channel } = await apiRequest<{ channel: NotificationChannel }>('/notifications/preference')
+  return channel
+}
+
+export async function setNotificationPreference(channel: NotificationChannel): Promise<NotificationChannel> {
+  const result = await apiRequest<{ channel: NotificationChannel }>('/notifications/preference', {
+    method: 'PUT',
+    body: { channel },
   })
+  return result.channel
 }
