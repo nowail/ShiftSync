@@ -1,0 +1,313 @@
+// ShiftSync backend schema.
+//
+// Naming and value choices deliberately mirror the frontend's mock types
+// (frontend/src/types/index.ts) wherever a direct mapping exists — enum values are
+// lowercase strings matching the frontend's string unions exactly (Role, ShiftStatus,
+// SwapType, SwapStage, NotificationType) so the API layer needs no translation table.
+//
+// One deliberate addition beyond the Phase 1 model list in BACKEND_PROMPT.md:
+// `ManagerLocation`. Phase 1 explicitly requires "location-scoping middleware for
+// managers" (managers can only see/manage locations they're assigned to), which needs
+// *some* record of that assignment. Reusing StaffCertification for it would be a
+// semantic stretch (certifications are skill-based scheduling eligibility, not
+// management scope), so this is a small, separate join table instead.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  manager
+  staff
+}
+
+enum ShiftStatus {
+  draft
+  published
+}
+
+enum AssignmentStatus {
+  active
+  cancelled
+}
+
+enum SwapType {
+  swap
+  drop
+  claim
+}
+
+// Matches frontend SwapStage exactly (types/index.ts).
+enum SwapStage {
+  requested
+  peer_accepted
+  awaiting_manager
+  approved
+  rejected
+}
+
+// Matches frontend NotificationKind exactly (types/index.ts).
+enum NotificationType {
+  schedule_published
+  swap_resolved
+  conflict
+  swap_requested
+  shift_reminder
+}
+
+enum NotificationChannel {
+  in_app
+  in_app_plus_email
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  passwordHash       String
+  role               Role
+  homeLocationId     String?
+  desiredWeeklyHours Int      @default(30)
+  avatarColor        String   @default("#656B82")
+  createdAt          DateTime @default(now()) @db.Timestamptz
+
+  homeLocation           Location?               @relation("HomeLocation", fields: [homeLocationId], references: [id])
+  managedLocations       ManagerLocation[]
+  skills                 StaffSkill[]
+  certifications         StaffCertification[]
+  availabilityRules      AvailabilityRule[]
+  availabilityExceptions AvailabilityException[]
+  assignments            Assignment[]            @relation("AssignmentStaff")
+  assignmentsGiven       Assignment[]            @relation("AssignmentAssignedBy")
+  swapRequestsFrom       SwapRequest[]           @relation("SwapFrom")
+  swapRequestsTo         SwapRequest[]           @relation("SwapTo")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  auditLogs              AuditLog[]
+
+  @@index([role])
+  @@index([homeLocationId])
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String
+  city      String
+  // IANA tz name. Exactly one per location — timezone-spanning locations are out of
+  // scope (documented decision; see frontend README).
+  timezone  String
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  homeUsers      User[]               @relation("HomeLocation")
+  managers       ManagerLocation[]
+  certifications StaffCertification[]
+  shifts         Shift[]
+  auditLogs      AuditLog[]
+}
+
+model ManagerLocation {
+  id         String @id @default(cuid())
+  userId     String
+  locationId String
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, locationId])
+}
+
+model Skill {
+  id    String @id @default(cuid())
+  // 'line' | 'grill' | 'prep' | 'expo' | 'bar' | 'host' | 'dish' — matches frontend SkillTag.
+  key   String @unique
+  label String
+
+  staffSkills    StaffSkill[]
+  certifications StaffCertification[]
+  shifts         Shift[]
+}
+
+// General skill inventory — "this person knows how to do X," independent of location.
+// Distinct from StaffCertification, which is the location-specific operational
+// authorization actually checked at assignment time.
+model StaffSkill {
+  id      String @id @default(cuid())
+  staffId String
+  skillId String
+
+  staff User  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, skillId])
+}
+
+// One row per (staff, location, skill) granted. Never deleted — de-certification sets
+// revokedAt instead, per the documented decision, so past Assignments made while the
+// cert was active stay intact and explainable in the audit trail.
+model StaffCertification {
+  id         String    @id @default(cuid())
+  staffId    String
+  locationId String
+  skillId    String
+  grantedAt  DateTime  @default(now()) @db.Timestamptz
+  revokedAt  DateTime? @db.Timestamptz
+
+  staff    User     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  skill    Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, locationId, skillId])
+  @@index([staffId, locationId, revokedAt])
+}
+
+// Recurring weekly window. dayOfWeek/startTime/endTime are naive (no embedded UTC
+// offset) — see the frontend README's Timezone Tangle note for how these are resolved
+// against a specific shift.
+model AvailabilityRule {
+  id        String @id @default(cuid())
+  staffId   String
+  dayOfWeek Int // 0 = Sunday .. 6 = Saturday
+  startTime String // 'HH:mm'
+  endTime   String // 'HH:mm'
+
+  staff User @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+}
+
+model AvailabilityException {
+  id        String   @id @default(cuid())
+  staffId   String
+  date      DateTime @db.Date
+  available Boolean
+  note      String?
+
+  staff User @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, date])
+}
+
+model Shift {
+  id            String      @id @default(cuid())
+  locationId    String
+  startsAt      DateTime    @db.Timestamptz
+  endsAt        DateTime    @db.Timestamptz
+  skillRequired String // Skill.key
+  headcount     Int         @default(1)
+  status        ShiftStatus @default(draft)
+  isPremium     Boolean     @default(false)
+  createdAt     DateTime    @default(now()) @db.Timestamptz
+  updatedAt     DateTime    @updatedAt @db.Timestamptz
+
+  location     Location      @relation(fields: [locationId], references: [id])
+  skill        Skill         @relation(fields: [skillRequired], references: [key])
+  assignments  Assignment[]
+  swapRequests SwapRequest[]
+
+  @@index([locationId, startsAt])
+  @@index([status])
+}
+
+// One row per filled seat, kept historically (never deleted) rather than overwritten —
+// status flips to `cancelled` and a new row is created on reassignment, so Shift History
+// / the audit trail can show who held a shift before. A Shift can have more than one
+// concurrent `active` Assignment when headcount > 1.
+model Assignment {
+  id             String           @id @default(cuid())
+  shiftId        String
+  staffId        String
+  status         AssignmentStatus @default(active)
+  assignedById   String
+  assignedAt     DateTime         @default(now()) @db.Timestamptz
+  cancelledAt    DateTime?        @db.Timestamptz
+  isOverride     Boolean          @default(false)
+  overrideReason String?
+  // Denormalized copy of the shift's time range, kept in sync at write time (see the
+  // service layer, not just this schema). Postgres EXCLUDE constraints can't reference a
+  // joined table's columns, so the range this constraint checks has to live on the same
+  // row it's declared on — see migrations/..._assignment_exclusion_constraint for why.
+  rangeStart     DateTime         @db.Timestamptz
+  rangeEnd       DateTime         @db.Timestamptz
+
+  shift      Shift @relation(fields: [shiftId], references: [id])
+  staff      User  @relation("AssignmentStaff", fields: [staffId], references: [id])
+  assignedBy User  @relation("AssignmentAssignedBy", fields: [assignedById], references: [id])
+
+  @@index([staffId, status])
+  @@index([shiftId, status])
+}
+
+model SwapRequest {
+  id          String    @id @default(cuid())
+  type        SwapType
+  shiftId     String
+  fromStaffId String
+  toStaffId   String?
+  stage       SwapStage @default(requested)
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  resolvedAt  DateTime? @db.Timestamptz
+  // Drop requests: computed-expired 24h before shift start. Read at query time — no cron
+  // dependency, per the documented decision — so this is a hint column, not a source of
+  // truth on its own.
+  expiresAt   DateTime? @db.Timestamptz
+
+  shift     Shift @relation(fields: [shiftId], references: [id])
+  fromStaff User  @relation("SwapFrom", fields: [fromStaffId], references: [id])
+  toStaff   User? @relation("SwapTo", fields: [toStaffId], references: [id])
+
+  @@index([fromStaffId, stage])
+  @@index([shiftId])
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  userId     String
+  type       NotificationType
+  title      String
+  body       String
+  locationId String?
+  readAt     DateTime?        @db.Timestamptz
+  createdAt  DateTime         @default(now()) @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  id      String              @id @default(cuid())
+  userId  String              @unique
+  channel NotificationChannel @default(in_app)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// entityId is a polymorphic reference (Shift/SwapRequest/Location/User id depending on
+// entityType) — deliberately not a hard foreign key, same reasoning as most audit-log
+// designs: the referenced row can be a type the log itself doesn't otherwise model, and
+// we never want an audit entry to become unwritable because of a FK constraint.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  entityType String
+  entityId   String
+  action     String
+  beforeJson Json?
+  afterJson  Json?
+  details    String?
+  locationId String?
+  at         DateTime @default(now()) @db.Timestamptz
+
+  actor    User      @relation(fields: [actorId], references: [id])
+  location Location? @relation(fields: [locationId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([locationId, at])
+  @@index([actorId])
+}

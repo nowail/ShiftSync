@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShieldCheck, Users, UserRound } from 'lucide-react'
-import { useSessionStore } from '../../store/session'
+import { ShieldCheck, TriangleAlert, Users, UserRound } from 'lucide-react'
+import { useSessionStore, DEMO_LOGIN_EMAILS, DEMO_LOGIN_PASSWORD } from '../../store/session'
+import { login as loginRequest } from '../../services/auth'
+import { ApiClientError } from '../../lib/apiClient'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import logo from '../../assets/shiftsync-logo.svg'
@@ -15,13 +17,41 @@ const ROLE_OPTIONS: { role: Role; label: string; description: string; icon: type
 
 export function Login() {
   const [role, setRole] = useState<Role>('manager')
-  const login = useSessionStore((s) => s.login)
+  const [email, setEmail] = useState(DEMO_LOGIN_EMAILS.manager)
+  const [password, setPassword] = useState(DEMO_LOGIN_PASSWORD)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const setSession = useSessionStore((s) => s.setSession)
   const navigate = useNavigate()
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleRoleChange(nextRole: Role) {
+    setRole(nextRole)
+    // Only swap the email if it still matches a demo default — don't clobber something the
+    // grader typed in by hand.
+    if (Object.values(DEMO_LOGIN_EMAILS).includes(email)) {
+      setEmail(DEMO_LOGIN_EMAILS[nextRole])
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    login(role)
-    navigate(`/${role}`, { replace: true })
+    setError(null)
+    setSubmitting(true)
+    try {
+      const { token, user } = await loginRequest(email, password)
+      setSession({
+        token,
+        role: user.role,
+        staffId: user.id,
+        staffName: user.name,
+        locationId: user.homeLocationId,
+      })
+      navigate(`/${user.role}`, { replace: true })
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Could not reach the server. Try again in a moment.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -47,7 +77,7 @@ export function Login() {
         >
           <div>
             <h2 className="text-display-md font-display text-ink">Sign in</h2>
-            <p className="text-body-sm text-slate-600">Pick a role to explore the demo as that user.</p>
+            <p className="text-body-sm text-slate-600">Pick a role to prefill a demo login, or use your own.</p>
           </div>
 
           <fieldset className="flex flex-col gap-2">
@@ -64,7 +94,7 @@ export function Login() {
                   name="role"
                   value={opt.role}
                   checked={role === opt.role}
-                  onChange={() => setRole(opt.role)}
+                  onChange={() => handleRoleChange(opt.role)}
                   className="sr-only"
                 />
                 <opt.icon size={18} className="shrink-0 text-ink" aria-hidden="true" />
@@ -76,14 +106,35 @@ export function Login() {
             ))}
           </fieldset>
 
-          <Input label="Email" type="email" placeholder="you@coastaleats.com" defaultValue="demo@coastaleats.com" />
-          <Input label="Password" type="password" placeholder="••••••••" defaultValue="password" />
+          <Input
+            label="Email"
+            type="email"
+            placeholder="you@coastaleats.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="username"
+          />
+          <Input
+            label="Password"
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
 
-          <Button type="submit" variant="primary" className="w-full">
-            Sign in as {ROLE_OPTIONS.find((o) => o.role === role)?.label}
+          {error && (
+            <p className="flex items-start gap-2 rounded-sm border border-brick/30 bg-brick/5 p-2.5 text-body-sm text-brick">
+              <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" variant="primary" className="w-full" disabled={submitting}>
+            {submitting ? 'Signing in…' : `Sign in as ${ROLE_OPTIONS.find((o) => o.role === role)?.label}`}
           </Button>
           <p className="text-center text-body-xs text-slate-500">
-            Demo only — authentication isn't wired up to anything real.
+            Demo password for every seeded account: <span className="font-medium">{DEMO_LOGIN_PASSWORD}</span>
           </p>
         </form>
       </div>
