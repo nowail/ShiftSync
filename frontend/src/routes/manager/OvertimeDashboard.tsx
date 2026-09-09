@@ -211,6 +211,21 @@ export function OvertimeDashboard() {
             const pctOf48 = Math.min(100, (totalHours / 48) * 100)
             const overWarning = totalHours >= WEEKLY_WARNING
             const overReference = totalHours > WEEKLY_REFERENCE
+
+            // §5: desired vs. actual, per staff member. A half-hour band counts as "on
+            // target" rather than requiring an exact match — shifts land on the half hour,
+            // so a literal zero-diff is rarer than a practically-equal week.
+            const desired = staff.desiredWeeklyHours
+            const diff = totalHours - desired
+            const onTarget = Math.abs(diff) < 0.5
+            const over = diff >= 0.5
+            const desiredTone = onTarget ? 'moss' : over ? 'brick' : 'flag'
+            const desiredLabel = onTarget
+              ? 'on target'
+              : over
+                ? `+${formatHours(diff)} over`
+                : `${formatHours(Math.abs(diff))} under`
+
             return (
               <div key={staff.id} className="flex flex-col gap-2 rounded-md border border-slate-200 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -225,6 +240,10 @@ export function OvertimeDashboard() {
                   </span>
                   <span className="font-display text-display-sm text-ink">{formatHours(totalHours)}</span>
                 </div>
+
+                <Badge tone={desiredTone}>
+                  {formatHours(totalHours)} worked / {formatHours(desired)} desired — {desiredLabel}
+                </Badge>
 
                 <div className="relative h-3 w-full rounded-full bg-slate-100">
                   <div
