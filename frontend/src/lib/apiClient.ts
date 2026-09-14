@@ -26,6 +26,20 @@ interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   skipAuth?: boolean
 }
 
+/**
+ * A 401 on an authenticated request means the token is missing/expired/invalid — the
+ * session is unrecoverable, so clear it and bounce to /login instead of leaving the rest
+ * of the app sitting on stale "authenticated" state with every query silently failing.
+ * Excluded from calls with skipAuth (e.g. /auth/login itself), where a 401 just means
+ * wrong credentials and should surface as a normal form error.
+ */
+function handleUnauthorized() {
+  useSessionStore.getState().logout()
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login'
+  }
+}
+
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   const { body, skipAuth, headers, ...rest } = options
 
@@ -45,6 +59,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   })
 
   if (!response.ok) {
+    if (response.status === 401 && !skipAuth) handleUnauthorized()
+
     let parsed: { error?: { message?: string; code?: string; details?: unknown } } | null = null
     try {
       parsed = await response.json()
@@ -105,6 +121,8 @@ export async function apiRequestText(path: string, options: ApiRequestOptions = 
   })
 
   if (!response.ok) {
+    if (response.status === 401 && !skipAuth) handleUnauthorized()
+
     let parsed: { error?: { message?: string; code?: string; details?: unknown } } | null = null
     try {
       parsed = await response.json()
